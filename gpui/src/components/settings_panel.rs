@@ -4,7 +4,7 @@ use gpui::{
     SharedString, StatefulInteractiveElement, Styled, div, px,
 };
 use gpui_component::{Sizable, WindowExt, h_flex, input::Input, scroll::ScrollableElement, v_flex};
-use mdict_rs::settings::DictEntry;
+use mdict_rs::{formats::mdict::dictionary_short_name, settings::DictEntry};
 use tracing::{info, warn};
 
 use crate::{colors, state::DictState};
@@ -127,11 +127,7 @@ fn dict_row(
     state: Entity<DictState>,
 ) -> gpui::AnyElement {
     let full_title = mdict_rs::formats::mdict::mdx_header_title(&entry.path);
-    let auto_short = if full_title.len() <= 25 {
-        full_title.clone()
-    } else {
-        abbreviate_display(&full_title)
-    };
+    let auto_short = dictionary_short_name(&full_title);
     let display_name = if entry.short_name.is_empty() {
         auto_short
     } else {
@@ -271,11 +267,7 @@ fn detail_button(idx: usize, state: Entity<DictState>) -> gpui::AnyElement {
 
             let title = mdict_rs::formats::mdict::mdx_header_title(&entry.path);
             let (encoding, version, description) = read_header_meta(&entry.path);
-            let auto_short = if title.len() <= 25 {
-                title.clone()
-            } else {
-                abbreviate_display(&title)
-            };
+            let auto_short = dictionary_short_name(&title);
             let current = if entry.short_name.is_empty() {
                 auto_short
             } else {
@@ -426,25 +418,6 @@ fn is_redundant_desc(title: &str, desc: &str) -> bool {
 fn read_header_meta(path: &str) -> (String, u8, String) {
     let info = mdict_rs::formats::mdict::mdx_header_info(path);
     (info.encoding, info.version, info.description)
-}
-
-fn abbreviate_display(title: &str) -> String {
-    let skip = ["the", "of", "a", "an", "and", "or", "for", "in", "on", "to"];
-    let mut abbr = String::new();
-    for word in title.split_whitespace() {
-        let clean: String = word
-            .chars()
-            .filter(|c| c.is_alphabetic() || *c == '-' || *c == '\'')
-            .collect();
-        if clean.is_empty() || skip.contains(&clean.to_lowercase().as_str()) {
-            continue;
-        }
-        if let Some(c) = clean.chars().next() {
-            abbr.push(c.to_ascii_uppercase());
-        }
-    }
-    abbr.truncate(10);
-    abbr
 }
 
 fn strip_html_tags(html: &str) -> String {

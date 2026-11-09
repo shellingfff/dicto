@@ -309,12 +309,12 @@ fn clean_description(raw: &str) -> String {
     }
 }
 
-/// Abbreviate a long dictionary title by taking the first letter of each
-/// significant word (uppercase or title-case). Examples:
-/// - "Merriam-Webster's Advanced Learner's English Dictionary" → "MWALED"
-/// - "The American Heritage® Dictionary of the English Language, Fifth Edition © 2017" → "TAHDOTELFE"
-/// - "Longman Dictionary of Contemporary English" → "LDOCE"
-fn abbreviate_title(title: &str) -> String {
+/// Generate a shared display name for settings and result tabs.
+/// English-style initials are only appropriate for ASCII alphabetic titles.
+pub fn dictionary_short_name(title: &str) -> String {
+    if title.chars().count() <= 25 || title.chars().any(|c| c.is_alphabetic() && !c.is_ascii()) {
+        return title.to_string();
+    }
     let skip_words = ["the", "of", "a", "an", "and", "or", "for", "in", "on", "to"];
     let mut abbr = String::new();
     for word in title.split_whitespace() {
@@ -331,10 +331,11 @@ fn abbreviate_title(title: &str) -> String {
             abbr.push(c.to_ascii_uppercase());
         }
     }
-    if abbr.len() > 10 {
-        abbr.truncate(10);
+    if abbr.is_empty() {
+        title.to_string()
+    } else {
+        abbr.chars().take(10).collect()
     }
-    abbr
 }
 
 pub struct MdxDictionary {
@@ -371,11 +372,7 @@ impl MdxDictionary {
             .filter(|t| !t.trim().is_empty())
             .unwrap_or_else(|| stem.clone());
 
-        let auto_short = if display_name.len() <= 25 {
-            display_name.clone()
-        } else {
-            abbreviate_title(&display_name)
-        };
+        let auto_short = dictionary_short_name(&display_name);
 
         // Use user override from settings if set, otherwise auto-generated.
         let short_name = crate::settings::short_name_override(mdx_path).unwrap_or(auto_short);
@@ -820,4 +817,42 @@ fn candidate_keys(key: &str) -> Vec<String> {
     }
     v.push(format!("/{key}"));
     v
+}
+
+#[cfg(test)]
+mod display_name_tests {
+    use super::dictionary_short_name;
+
+    #[test]
+    fn preserves_chinese_titles_instead_of_taking_one_initial() {
+        let title = "牛津高阶英汉双解词典(第9版)";
+        assert_eq!(dictionary_short_name(title), title);
+        let long_title = "牛津高阶英汉双解词典完整版包含详细释义例句和发音的第九版";
+        assert!(long_title.chars().count() > 25);
+        assert_eq!(dictionary_short_name(long_title), long_title);
+    }
+
+    #[test]
+    fn english_titles_still_use_initials_when_long() {
+        assert_eq!(
+            dictionary_short_name("Oxford Dictionary"),
+            "Oxford Dictionary"
+        );
+        assert_eq!(
+            dictionary_short_name("Longman Dictionary of Contemporary English"),
+            "LDCE"
+        );
+        assert_eq!(
+            dictionary_short_name("Merriam-Webster's Advanced Learner's English Dictionary"),
+            "MALED"
+        );
+    }
+
+    #[test]
+    fn unicode_names_are_safe_and_empty_initials_keep_the_title() {
+        let title = "Édition française complète du dictionnaire";
+        assert_eq!(dictionary_short_name(title), title);
+        let title = "123456789012345678901234567890";
+        assert_eq!(dictionary_short_name(title), title);
+    }
 }
