@@ -17,6 +17,7 @@ use crate::state::{DictResult, DictState};
 pub struct DictApp {
     pub state: Entity<DictState>,
     input: Entity<InputState>,
+    _navigation_keys: gpui::Subscription,
 }
 
 impl DictApp {
@@ -138,7 +139,59 @@ impl DictApp {
             input_state.focus(window, cx);
         });
 
-        Self { state, input }
+        // Input and focus actions consume Tab before element key handlers run.
+        // Intercept navigation before action dispatch, scoped to this window.
+        let owner_window = window.window_handle();
+        let view = cx.entity().downgrade();
+        let navigation_keys = cx.intercept_keystrokes(move |event, window, cx| {
+            if window.window_handle() != owner_window || window.has_active_dialog(cx) {
+                return;
+            }
+            let m = &event.keystroke.modifiers;
+            let key = event.keystroke.key.as_str();
+            if m.alt || m.platform {
+                return;
+            }
+            let switch_dictionary = key == "tab" && !m.control;
+            let switch_word = m.control && !m.shift && (key == "n" || key == "p");
+            if !switch_dictionary && !switch_word {
+                return;
+            }
+            let handled = view
+                .update(cx, |this, cx| {
+                    if switch_dictionary {
+                        cx.update_entity(&this.state, |s, cx| {
+                            let count = s.results.len();
+                            if count > 1 {
+                                s.active_result = if m.shift {
+                                    (s.active_result + count - 1) % count
+                                } else {
+                                    (s.active_result + 1) % count
+                                };
+                                cx.notify();
+                            }
+                        });
+                    } else {
+                        let state = this.state.clone();
+                        if key == "n" {
+                            search_bar::navigate_down(&state, this, cx);
+                        } else {
+                            search_bar::navigate_up(&state, this, cx);
+                        }
+                    }
+                })
+                .is_ok();
+            if handled {
+                window.prevent_default();
+                cx.stop_propagation();
+            }
+        });
+
+        Self {
+            state,
+            input,
+            _navigation_keys: navigation_keys,
+        }
     }
 
     pub fn lookup_word(&mut self, word: String, cx: &mut Context<Self>) {

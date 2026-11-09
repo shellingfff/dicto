@@ -77,7 +77,7 @@ fn definition_header(
     active: usize,
     state: Entity<DictState>,
 ) -> gpui::AnyElement {
-    let mut col = v_flex()
+    let col = v_flex()
         .w_full()
         .px(px(16.))
         .pt(px(12.))
@@ -85,13 +85,8 @@ fn definition_header(
         .gap(px(8.))
         .child(word_heading(word));
 
-    if results.len() > 1 {
-        col = col.child(tab_strip(results, active, state));
-    } else {
-        col = col.child(divider());
-    }
-
-    col.into_any_element()
+    col.child(tab_strip(results, active, state))
+        .into_any_element()
 }
 
 fn tab_strip(results: &[DictResult], active: usize, state: Entity<DictState>) -> gpui::AnyElement {
@@ -181,13 +176,5 @@ fn word_heading(word: &str) -> gpui::AnyElement {
         .font_weight(FontWeight::BOLD)
         .text_color(colors::primary())
         .child(SharedString::from(word.to_string()))
-        .into_any_element()
-}
-
-fn divider() -> gpui::AnyElement {
-    div()
-        .h(px(1.))
-        .w_full()
-        .bg(colors::border())
         .into_any_element()
 }

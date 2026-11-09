@@ -66,6 +66,12 @@ cargo build --release --package dicto
 
 **Runtime dependencies:** `gtk3`, `alsa-lib`, `libxkbcommon`, `lzo`
 
+## Keyboard shortcuts
+
+- **Tab / Shift+Tab** — next / previous dictionary result, wrapping around.
+- **Ctrl+N / Ctrl+P** — next / previous word in the suggestion list.
+- **Ctrl+L / Ctrl+F** — focus the search field.
+
 ## Dictionary setup
 
 

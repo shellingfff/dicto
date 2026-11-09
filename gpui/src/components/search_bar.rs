@@ -49,7 +49,7 @@ pub fn search_bar(
     }))
 }
 
-fn navigate_down(
+pub(crate) fn navigate_down(
     state: &gpui::Entity<DictState>,
     this: &mut crate::app::DictApp,
     cx: &mut gpui::Context<crate::app::DictApp>,
@@ -74,7 +74,7 @@ fn navigate_down(
     }
 }
 
-fn navigate_up(
+pub(crate) fn navigate_up(
     state: &gpui::Entity<DictState>,
     this: &mut crate::app::DictApp,
     cx: &mut gpui::Context<crate::app::DictApp>,
