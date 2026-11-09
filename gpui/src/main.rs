@@ -2,10 +2,8 @@
 
 mod app;
 mod audio;
-mod catalog;
 mod colors;
 mod components;
-mod download;
 mod html;
 mod indexing;
 mod state;
@@ -93,28 +91,6 @@ fn main() {
     mdict_rs::registry::reload();
     indexing::load_stylesheets();
 
-    // Prepare telemetry consent + installation id *before* entering the GPUI
-    // runtime. We want to fail these only to warnings, not block startup.
-    let install_id = match mdict_rs::settings::ensure_installation_id() {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::warn!("telemetry: failed to ensure installation id: {e}");
-            String::new()
-        }
-    };
-    let settings = mdict_rs::settings::current();
-    let opted_in = matches!(
-        settings.telemetry_consent,
-        mdict_rs::settings::TelemetryConsent::OptedIn
-    );
-    let app_version = env!("APP_VERSION").to_string();
-
-    // Initialize telemetry once before GPUI runs. Opted-out users get NullTelemetry.
-    dicto_telemetry::init(opted_in, install_id.clone(), app_version);
-    if opted_in {
-        dicto_telemetry::get().track(dicto_telemetry::Event::AppStarted);
-    }
-
     let app = application();
     app.with_assets(AppAssets).run(move |cx: &mut App| {
         gpui_component::init(cx);
@@ -175,7 +151,6 @@ fn setup_tray(cx: &mut App) {
 }
 
 fn open_dictionary_window(cx: &mut App) {
-    dicto_telemetry::get().track(dicto_telemetry::Event::WindowOpened);
     let bounds = Bounds::centered(None, size(px(920.), px(680.)), cx);
 
     let state_for_indexing: std::cell::RefCell<Option<gpui::Entity<DictState>>> =

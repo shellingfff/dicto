@@ -482,15 +482,8 @@ fn import_files(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui::Ap
     // Indices of the valid entries we just pushed (invalid ones come first in the batch).
     let valid_start = base_idx + invalid.len();
     cx.spawn(async move |cx: &mut AsyncApp| {
-        let import_started = std::time::Instant::now();
-        let mut total_bytes: u64 = 0;
         for (offset, source_path) in valid.into_iter().enumerate() {
             let idx = valid_start + offset;
-            total_bytes = total_bytes.saturating_add(
-                std::fs::metadata(&source_path)
-                    .map(|m| m.len())
-                    .unwrap_or(0),
-            );
             let source_str = source_path.to_string_lossy().to_string();
 
             let is_mdd = source_path
@@ -563,10 +556,6 @@ fn import_files(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui::Ap
 
             if let Err(e) = index_result {
                 warn!("import_panel: index failed: {e}");
-                dicto_telemetry::get().track(dicto_telemetry::Event::ErrorOccurred {
-                    kind: dicto_telemetry::ErrorKind::Import,
-                    message: format!("index failed: {e}"),
-                });
                 cx.update(|cx| {
                     cx.update_entity(&state, |s, cx| {
                         if let Some(f) = s.import_files.get_mut(idx) {
@@ -596,19 +585,6 @@ fn import_files(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui::Ap
                 s.dictionaries = mdict_rs::settings::current().dictionaries;
                 cx.notify();
             });
-        });
-
-        // Fire one aggregate event for the whole batch: the count of enabled
-        // dictionaries after the import, never the names/paths. Duration
-        // covers registration and indexing from task start to here.
-        // Size is total selected source bytes, rounded to the nearest MB — rounding
-        // breaks the precise size fingerprint while preserving perf signal.
-        let count = mdict_rs::settings::enabled_mdx().len();
-        let size_mb = (total_bytes + 500_000) / 1_000_000;
-        dicto_telemetry::get().track(dicto_telemetry::Event::DictionaryImported {
-            count,
-            duration_ms: import_started.elapsed().as_millis() as u64,
-            size_mb,
         });
     })
     .detach();

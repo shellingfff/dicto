@@ -1005,7 +1005,7 @@ Wildcard chips: `*.{apex}`. The `DomainWildcard` variant in the rule stores just
 
 ---
 
-## New Patterns & Gotchas (from download feature)
+## Additional UI Patterns & Gotchas
 
 ### `open_dialog` Cannot Be Called Before Root Renders
 

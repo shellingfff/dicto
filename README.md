@@ -12,7 +12,6 @@
 - **Instant search** — suggestions appear as you type, results load in milliseconds
 - **Faithful rendering** — full HTML output with per-dictionary CSS so each dict looks exactly as its author intended
 - **Multi-dictionary** — load as many MDX files as you like, enable/disable/reorder them without restarting
-- **Built-in dictionary download** — download dictionaries from within the app (Settings → Download tab, or on first launch)
 
 ## Installation
 
@@ -69,11 +68,10 @@ cargo build --release --package dicto
 
 ## Dictionary setup
 
-**Option 1 — Download from the app:** Open Settings (⚙) → Download tab, pick a dictionary, and click Download. WordNet 3.1 (English, 155k+ words) is included. Dictionaries are installed to `~/.config/dicto/dicts/<id>/` and indexed automatically.
 
-**Option 2 — Use existing files:** Open Settings → Import and select a directory. Dicto recursively finds all `.mdx` dictionaries, registers their original paths without copying them, and remembers the directory to discover new dictionaries on subsequent launches. You can also drag individual dictionary files into the import panel. Keep companion `.mdd` and CSS files alongside the MDX. Search indexes (`.fst` and `.offsets`) are written beside the source files, so the directory must be writable. Keep the files in place after adding them.
+**Option 1 — Use existing files:** Open Settings → Import and select a directory. Dicto recursively finds all `.mdx` dictionaries, registers their original paths without copying them, and remembers the directory to discover new dictionaries on subsequent launches. You can also drag individual dictionary files into the import panel. Keep companion `.mdd` and CSS files alongside the MDX. Search indexes (`.fst` and `.offsets`) are written beside the source files, so the directory must be writable. Keep the files in place after adding them.
 
-**Option 3 — Drop files manually:** Place `.mdx` (and optional `.mdd`) files into:
+**Option 2 — Drop files manually:** Place `.mdx` (and optional `.mdd`) files into:
 
 ```text
 ~/.config/dicto/dicts/
@@ -98,7 +96,6 @@ The workspace has two crates:
 - **`mdict-rs`** (library) — MDX/MDD parser, redb indexer, query pipeline, settings
 - **`dicto`** (binary) — GPUI desktop app
 
-- **`telemetry`** (library) — opt-in anonymous analytics. Off by default; never transmits what you search for or which dictionaries you import. See [docs/telemetry.md](docs/telemetry.md).
 
 ## References
 

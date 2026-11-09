@@ -110,9 +110,6 @@ fn word_item(
         )
         .on_click(move |_, _, cx| {
             let w = word.clone();
-            dicto_telemetry::get().track(dicto_telemetry::Event::LookupPerformed {
-                source: dicto_telemetry::LookupSource::Click,
-            });
             let results: Vec<crate::state::DictResult> = mdict_rs::query::query_all(&w)
                 .into_iter()
                 .map(|hit| {

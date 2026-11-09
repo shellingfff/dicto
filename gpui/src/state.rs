@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use mdict_rs::settings::DictEntry;
 
-use crate::catalog::DictCatalogEntry;
 use crate::html::Block;
 
 #[derive(Debug, Clone)]
@@ -22,29 +21,6 @@ pub enum ImportStatus {
     Scanning,
     Pending,
     Indexing,
-    Done,
-    Error(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum CatalogState {
-    Idle,
-    Loading,
-    Loaded {
-        base_url: String,
-        entries: Vec<DictCatalogEntry>,
-    },
-    Error(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum DictDownloadStatus {
-    Idle,
-    Downloading {
-        progress: f32,
-        speed: String,
-        current_file: String,
-    },
     Done,
     Error(String),
 }
@@ -78,13 +54,8 @@ pub struct DictState {
     /// Files being imported via the init/settings modal.
     pub import_files: Vec<ImportFile>,
 
-    /// Active tab in the settings dialog: 0 = Dictionaries, 1 = Import, 2 = Download.
+    /// Active tab in the settings dialog: 0 = Dictionaries, 1 = Import, 2 = About.
     pub settings_active_tab: usize,
-
-    pub catalog: CatalogState,
-    pub download_status: DictDownloadStatus,
-    pub download_active_id: Option<String>,
-    pub import_modal_tab: usize,
 }
 
 impl DictState {
@@ -104,10 +75,6 @@ impl DictState {
             show_import_modal: mdict_rs::settings::current().dictionaries.is_empty(),
             import_files: Vec::new(),
             settings_active_tab: 0,
-            catalog: CatalogState::Idle,
-            download_status: DictDownloadStatus::Idle,
-            download_active_id: None,
-            import_modal_tab: 0,
         }
     }
 }

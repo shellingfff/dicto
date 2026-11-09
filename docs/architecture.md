@@ -84,9 +84,7 @@ to keep the library honest about its dependencies.
 │  On disk                                                         │
 │   ~/.config/dicto/dicts/<id>/<filename>.mdx                  │
 │   ~/.config/dicto/dicts/<id>/<filename>.mdd                  │
-│   ~/.config/dicto/dicts/<id>/.version                        │
 │   ~/.config/dicto/settings.toml                             │
-│   ~/.config/dicto/catalog-cache.json                        │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -125,19 +123,11 @@ gpui/
 │   │                       (Ctrl+L/F, Esc), auto-select first
 │   │                       suggestion with debounced preview
 │   ├── state.rs            DictState — see "State fields" below
-│   ├── catalog.rs          DictCatalogEntry model, catalog fetch/cache,
-│   │                       InstallStatus (NotInstalled/UpToDate/Update),
-│   │                       download URL construction
-│   ├── download.rs         File download with SHA256 verification,
-│   │                       SharedProgress for UI polling
 │   ├── audio.rs            rodio + ffmpeg fallback for Speex
 │   ├── colors.rs           theme color refs (bg, surface, primary,
-│   │                       text, border, success, error, update)
+│   │                       text, border)
 │   ├── components/
 │   │   ├── detail_panel.rs heading + TabBar + scroll body
-│   │   ├── download_panel.rs catalog list, download/installed/update
-│   │   │                       buttons, progress polling, post-download
-│   │   │                       settings update + indexing
 │   │   ├── word_list.rs    left pane
 │   │   ├── search_bar.rs   input + right_slot for the cog
 │   │   ├── settings_panel.rs dict list UI + apply_save;
@@ -169,13 +159,9 @@ gpui/
 | `selected_suggestion` | `Option<usize>` | Keyboard-selected row in WordList. |
 | `dictionaries` | `Vec<DictEntry>` | Working copy for the settings Dictionaries tab. |
 | `indexing_total` / `indexing_done` / `indexing_current` | `usize` / `usize` / `Option<String>` | Background indexing progress shown in `indexing_bar`. |
-| `settings_active_tab` | `usize` | 0 = Dictionaries, 1 = Import, 2 = Download (settings dialog). |
+| `settings_active_tab` | `usize` | 0 = Dictionaries, 1 = Import, 2 = About (settings dialog). |
 | `show_init_modal` | `bool` | True when `~/.config/dicto/dicts/` contains no `.mdx` files at startup. Opens the Get Dictionaries dialog. |
 | `import_files` | `Vec<ImportFile>` | Files queued/in-progress/completed in the current import session. |
-| `catalog` | `CatalogState` | Idle → Loading → Loaded { base_url, entries } or Error. Fetched from remote catalog.json. |
-| `download_status` | `DictDownloadStatus` | Idle / Downloading { progress, speed, current_file } / Done / Error. |
-| `download_active_id` | `Option<String>` | ID of the dictionary currently being downloaded. |
-| `init_modal_tab` | `usize` | 0 = Download, 1 = Import (first-run dialog). |
 
 `ImportFile.status` cycles through `Pending → Copying → Indexing → Done` (or `Error(String)` on failure).
 
@@ -197,12 +183,10 @@ gpui/
 
 | Where | What |
 |-------|------|
-| `~/.config/dicto/dicts/<id>/*.mdx` (and `.mdd`) | Downloaded dictionaries, one folder per catalog entry. |
-| `~/.config/dicto/dicts/<id>/.version` | Installed version string (e.g. `"1.0"`), used for update detection. |
+| `~/.config/dicto/dicts/<id>/*.mdx` (and `.mdd`) | Optional managed dictionary files; imports use original source paths. |
 | `~/.config/dicto/dicts/<stem>.mdx` (and `.mdd`) | Manually-imported dictionaries (flat in dicts/). |
 | `~/.config/dicto/dicts/*.mdx.fst` + `*.mdx.offsets` (and `.mdd.*`) | FST index + offset table built by `indexing`. |
 | `~/.config/dicto/settings.toml` | Enabled list + display order. |
-| `~/.config/dicto/catalog-cache.json` | Cached remote catalog (24h TTL). |
 | `/tmp/mdict-rs-cache/` | Decoded images + transcoded WAV clips. Wiped on reboot; safe to delete any time. |
 
 ## Where to start when something's wrong

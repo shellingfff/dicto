@@ -4,12 +4,7 @@ use gpui::{
     AppContext as _, Context, Entity, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
     ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
-use gpui_component::{
-    Root, TitleBar, WindowExt, h_flex,
-    input::InputState,
-    tab::{Tab, TabBar},
-    v_flex,
-};
+use gpui_component::{Root, TitleBar, WindowExt, h_flex, input::InputState, v_flex};
 
 use crate::colors;
 use crate::components::{
@@ -105,9 +100,6 @@ impl DictApp {
 
                     if should_preview {
                         let word_for_result = word.clone();
-                        dicto_telemetry::get().track(dicto_telemetry::Event::LookupPerformed {
-                            source: dicto_telemetry::LookupSource::AutoPreview,
-                        });
                         let results = cx
                             .background_executor()
                             .spawn(async move {
@@ -146,28 +138,6 @@ impl DictApp {
             input_state.focus(window, cx);
         });
 
-        // First-run telemetry consent: if the user hasn't decided yet (fresh
-        // install, or an upgrader whose pre-telemetry settings.toml defaulted
-        // the field to Undecided), surface a one-time consent dialog. The
-        // dialog records OptedIn / OptedOut; closing it (without choosing) is
-        // treated as OptedOut so it never nags.
-        //
-        // Deferred because `open_dialog` ultimately calls
-        // `gpui_component::Root::update`, which requires the window's root
-        // view to already be a `Root`. At construction time the root is the
-        // `DictApp` being built here — `Root::new(view, ...)` only becomes the
-        // window root *after* this constructor returns. `window.defer` runs
-        // the open at the end of the current effect cycle, by which point the
-        // root is committed.
-        if matches!(
-            mdict_rs::settings::current().telemetry_consent,
-            mdict_rs::settings::TelemetryConsent::Undecided
-        ) {
-            window.defer(cx, |window, cx| {
-                crate::components::consent_dialog::open_consent_dialog(window, cx);
-            });
-        }
-
         Self { state, input }
     }
 
@@ -175,9 +145,6 @@ impl DictApp {
         if word.is_empty() {
             return;
         }
-        dicto_telemetry::get().track(dicto_telemetry::Event::LookupPerformed {
-            source: dicto_telemetry::LookupSource::Keyboard,
-        });
 
         cx.update_entity(&self.state, |s, cx| {
             s.result_word = Some(word.clone());
@@ -239,7 +206,6 @@ impl Render for DictApp {
             .child(
                 TitleBar::new()
                     .on_close_window(|_, window, _| {
-                        dicto_telemetry::get().track(dicto_telemetry::Event::WindowClosed);
                         window.remove_window();
                     })
                     .child(
@@ -370,9 +336,6 @@ fn cog_button(state: Entity<DictState>) -> gpui::AnyElement {
         .child(SharedString::from("\u{2699} Settings"))
         .on_click(move |_, window, cx| {
             let state = state.clone();
-            dicto_telemetry::get().track(dicto_telemetry::Event::SettingsOpened {
-                source: dicto_telemetry::SettingsSource::GearButton,
-            });
 
             window.open_dialog(cx, move |dialog, _window, _cx| {
                 let state = state.clone();
@@ -383,7 +346,7 @@ fn cog_button(state: Entity<DictState>) -> gpui::AnyElement {
                     .h(px(560.))
                     .close_button(true)
                     .overlay_closable(true)
-                    .content(move |content, window, cx| {
+                    .content(move |content, _window, cx| {
                         let active_tab = state.read(cx).settings_active_tab;
 
                         content.child(
@@ -417,17 +380,6 @@ fn cog_button(state: Entity<DictState>) -> gpui::AnyElement {
                                         cx,
                                     )
                                 } else if active_tab == 2 {
-                                    crate::components::download_panel::download_tab_content(
-                                        state.clone(),
-                                        window,
-                                        cx,
-                                    )
-                                } else if active_tab == 3 {
-                                    crate::components::settings_panel::telemetry_tab_content(
-                                        state.clone(),
-                                        cx,
-                                    )
-                                } else if active_tab == 4 {
                                     crate::components::about_panel::panel_content()
                                 } else {
                                     let is_importing =
@@ -467,8 +419,7 @@ fn open_get_dictionaries_dialog(
             .overlay_closable(false)
             .content({
                 let s = s.clone();
-                move |content, window, cx| {
-                    let active_tab = s.read(cx).import_modal_tab;
+                move |content, _window, cx| {
                     let is_importing = s.read(cx).import_files.iter().any(|f| {
                         matches!(
                             f.status,
@@ -478,43 +429,11 @@ fn open_get_dictionaries_dialog(
                         )
                     });
 
-                    content.child(
-                        v_flex()
-                            .w_full()
-                            .gap(px(12.))
-                            .child(
-                                h_flex().w_full().child(
-                                    TabBar::new("import-modal-tabs")
-                                        .underline()
-                                        .selected_index(active_tab)
-                                        .cursor_pointer()
-                                        .on_click({
-                                            let ts = s.clone();
-                                            move |&ix, _window, cx| {
-                                                cx.update_entity(&ts, |s, cx| {
-                                                    s.import_modal_tab = ix;
-                                                    cx.notify();
-                                                });
-                                            }
-                                        })
-                                        .child(Tab::new().label("Download"))
-                                        .child(Tab::new().label("Import")),
-                                ),
-                            )
-                            .child(if active_tab == 0 {
-                                crate::components::download_panel::download_tab_content(
-                                    s.clone(),
-                                    window,
-                                    cx,
-                                )
-                            } else {
-                                crate::components::import_panel::import_panel_content(
-                                    s.clone(),
-                                    is_importing,
-                                    cx,
-                                )
-                            }),
-                    )
+                    content.child(crate::components::import_panel::import_panel_content(
+                        s.clone(),
+                        is_importing,
+                        cx,
+                    ))
                 }
             })
             .footer(
