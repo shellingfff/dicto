@@ -19,8 +19,8 @@ pub struct ImportFile {
 }
 
 pub enum ImportStatus {
+    Scanning,
     Pending,
-    Copying,
     Indexing,
     Done,
     Error(String),
@@ -73,7 +73,7 @@ pub struct DictState {
     pub indexing_done: usize,
     pub indexing_current: Option<String>,
 
-    /// True when the dicts directory was empty at startup — shows import modal.
+    /// True when no dictionaries were configured at startup — shows import modal.
     pub show_import_modal: bool,
     /// Files being imported via the init/settings modal.
     pub import_files: Vec<ImportFile>,
@@ -101,7 +101,7 @@ impl DictState {
             indexing_total: 0,
             indexing_done: 0,
             indexing_current: None,
-            show_import_modal: mdict_rs::config::discover_mdx_files().is_empty(),
+            show_import_modal: mdict_rs::settings::current().dictionaries.is_empty(),
             import_files: Vec::new(),
             settings_active_tab: 0,
             catalog: CatalogState::Idle,

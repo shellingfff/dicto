@@ -1,9 +1,9 @@
-//! User-editable settings persisted to `~/.config/mdict-dict/settings.toml`.
+//! User-editable settings persisted to `~/.config/dicto/settings.toml`.
 //!
 //! Tracks the list of MDX dictionaries (path + enabled flag) in the order
-//! the user wants them queried. New `.mdx` files dropped into the mdict
-//! directory get appended (enabled by default); removed files are dropped
-//! on next save.
+//! the user wants them queried, including files selected outside the managed
+//! directory. Newly discovered managed files are appended; missing files
+//! are dropped when settings are reconciled.
 
 use std::fs;
 use std::path::PathBuf;
@@ -19,6 +19,9 @@ use crate::config::{APP_NAME, discover_mdx_files};
 pub struct Settings {
     #[serde(default)]
     pub dictionaries: Vec<DictEntry>,
+    /// User-selected folders, scanned recursively on launch and settings updates.
+    #[serde(default)]
+    pub dictionary_directories: Vec<String>,
     /// Telemetry opt-in state. Stored here so it persists in settings.toml
     /// without coupling this crate to any analytics dependency.
     #[serde(default)]
@@ -83,11 +86,22 @@ fn load_from_disk() -> Settings {
 
 /// Reconcile a stored settings list with what's currently on disk:
 /// new files get appended (enabled by default), missing files dropped.
-fn merge_with_disk(mut s: Settings) -> Settings {
-    let on_disk = discover_mdx_files();
-    let known: std::collections::HashSet<String> = on_disk.iter().cloned().collect();
+fn merge_with_disk(s: Settings) -> Settings {
+    let mut on_disk = discover_mdx_files();
+    for root in &s.dictionary_directories {
+        match crate::config::mdx_files_in_directory(std::path::Path::new(root)) {
+            Ok(paths) => {
+                on_disk.extend(paths.into_iter().map(|p| p.to_string_lossy().into_owned()))
+            }
+            Err(e) => warn!("cannot scan dictionary folder {root}: {e}"),
+        }
+    }
+    merge_discovered(s, on_disk)
+}
 
-    s.dictionaries.retain(|d| known.contains(&d.path));
+fn merge_discovered(mut s: Settings, on_disk: Vec<String>) -> Settings {
+    // Explicitly selected dictionaries may live outside the managed directory.
+    s.dictionaries.retain(|d| PathBuf::from(&d.path).is_file());
 
     let mut existing: std::collections::HashSet<String> =
         s.dictionaries.iter().map(|d| d.path.clone()).collect();
@@ -237,4 +251,44 @@ pub fn enabled_mdd() -> Vec<String> {
         })
         .filter(|p| PathBuf::from(p).exists())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn external_paths_survive_settings_roundtrip_and_discovery() {
+        let root = std::env::temp_dir().join(format!("dicto-settings-{}", format_uuid_v4()));
+        let external = root.join("external");
+        let managed = root.join("managed");
+        fs::create_dir_all(&external).unwrap();
+        fs::create_dir_all(&managed).unwrap();
+        let external_path = external.join("dictionary.mdx");
+        let managed_path = managed.join("dictionary.mdx");
+        fs::write(&external_path, b"source dictionary").unwrap();
+        fs::write(&managed_path, b"managed dictionary").unwrap();
+        let external_path = external_path.to_string_lossy().into_owned();
+        let managed_path = managed_path.to_string_lossy().into_owned();
+        let mut settings = Settings::default();
+        settings.dictionaries.push(DictEntry {
+            path: external_path.clone(),
+            enabled: false,
+            short_name: "Custom".into(),
+        });
+        // Simulate loading saved external paths on the next launch.
+        let loaded = toml::from_str(&toml::to_string(&settings).unwrap()).unwrap();
+        let merged = merge_discovered(loaded, vec![managed_path.clone()]);
+        assert_eq!(merged.dictionaries.len(), 2);
+        assert_eq!(merged.dictionaries[0].path, external_path);
+        assert!(!merged.dictionaries[0].enabled);
+        assert_eq!(merged.dictionaries[0].short_name, "Custom");
+        assert_eq!(merged.dictionaries[1].path, managed_path);
+        let merged = merge_discovered(merged, vec![managed_path]);
+        assert_eq!(merged.dictionaries.len(), 2);
+        fs::remove_file(&external_path).unwrap();
+        let merged = merge_discovered(merged, vec![]);
+        assert_eq!(merged.dictionaries.len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
 }

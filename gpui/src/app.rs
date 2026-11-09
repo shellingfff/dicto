@@ -406,7 +406,8 @@ fn cog_button(state: Entity<DictState>) -> gpui::AnyElement {
                                         state.read(cx).import_files.iter().any(|f| {
                                             matches!(
                                                 f.status,
-                                                crate::state::ImportStatus::Copying
+                                                crate::state::ImportStatus::Scanning
+                                                    | crate::state::ImportStatus::Pending
                                                     | crate::state::ImportStatus::Indexing
                                             )
                                         });
@@ -433,7 +434,8 @@ fn cog_button(state: Entity<DictState>) -> gpui::AnyElement {
                                         state.read(cx).import_files.iter().any(|f| {
                                             matches!(
                                                 f.status,
-                                                crate::state::ImportStatus::Copying
+                                                crate::state::ImportStatus::Scanning
+                                                    | crate::state::ImportStatus::Pending
                                                     | crate::state::ImportStatus::Indexing
                                             )
                                         });
@@ -470,7 +472,8 @@ fn open_get_dictionaries_dialog(
                     let is_importing = s.read(cx).import_files.iter().any(|f| {
                         matches!(
                             f.status,
-                            crate::state::ImportStatus::Copying
+                            crate::state::ImportStatus::Scanning
+                                | crate::state::ImportStatus::Pending
                                 | crate::state::ImportStatus::Indexing
                         )
                     });

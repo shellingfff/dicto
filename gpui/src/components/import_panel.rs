@@ -27,8 +27,7 @@ pub fn import_panel_content(
         let per_file: f32 = files
             .iter()
             .map(|f| match &f.status {
-                ImportStatus::Pending => 0.0,
-                ImportStatus::Copying => 33.0,
+                ImportStatus::Scanning | ImportStatus::Pending => 0.0,
                 ImportStatus::Indexing => 66.0,
                 ImportStatus::Done | ImportStatus::Error(_) => 100.0,
             })
@@ -98,14 +97,14 @@ fn instructions() -> gpui::AnyElement {
             div()
                 .text_size(px(13.))
                 .text_color(colors::text())
-                .child("To get started, add your MDict dictionary files."),
+                .child("Choose a dictionary folder. Dicto loads all MDX dictionaries in it and its subfolders."),
         )
         .child(
             div()
                 .text_size(px(12.))
                 .text_color(colors::text_secondary())
                 .child(
-                    "Supported: .mdx, .mdd, .css, .js, .png  ·  All must share the same name as a dictionary. Files are copied to ~/.config/dicto/dicts/",
+                    "Files stay in their original location. Keep matching .mdd and .css files beside the .mdx. The folder must be writable for search indexes.",
                 ),
         )
         .into_any_element()
@@ -140,12 +139,10 @@ fn drop_zone(state: Entity<DictState>, is_importing: bool) -> gpui::AnyElement {
                 cx.spawn(async move |cx: &mut AsyncApp| {
                     let rx = cx.update(|cx| {
                         cx.prompt_for_paths(PathPromptOptions {
-                            files: true,
-                            directories: false,
+                            files: false,
+                            directories: true,
                             multiple: true,
-                            prompt: Some(SharedString::from(
-                                "Select Dictionary Files (MDX · MDD · CSS · JS · PNG)",
-                            )),
+                            prompt: Some(SharedString::from("Select Dictionary Folder")),
                         })
                     });
                     if let Ok(Ok(Some(paths))) = rx.await {
@@ -167,13 +164,13 @@ fn drop_zone(state: Entity<DictState>, is_importing: bool) -> gpui::AnyElement {
             .text_size(px(13.))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(colors::text())
-            .child("Drop files or click to browse"),
+            .child("Drop a folder or click to choose one"),
     )
     .child(
         div()
             .text_size(px(11.))
             .text_color(colors::text_secondary())
-            .child("MDX · MDD · CSS · JS · PNG  (all need a matching dictionary)"),
+            .child("Subfolders are scanned automatically · Files stay in place"),
     )
     .into_any_element()
 }
@@ -201,8 +198,8 @@ fn file_list(state: Entity<DictState>, cx: &gpui::App) -> gpui::AnyElement {
 
 fn file_row(idx: usize, file: &ImportFile) -> gpui::AnyElement {
     let (status_text, color) = match &file.status {
+        ImportStatus::Scanning => ("Scanning folder…".to_string(), colors::primary()),
         ImportStatus::Pending => ("Waiting…".to_string(), colors::text_secondary()),
-        ImportStatus::Copying => ("Copying…".to_string(), colors::primary()),
         ImportStatus::Indexing => ("Building index…".to_string(), colors::primary()),
         ImportStatus::Done => (
             "✓ Imported".to_string(),
@@ -252,6 +249,14 @@ fn file_row(idx: usize, file: &ImportFile) -> gpui::AnyElement {
                 .child(
                     div()
                         .text_size(px(11.))
+                        .text_color(colors::text_secondary())
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .child(SharedString::from(file.path.to_string_lossy().into_owned())),
+                )
+                .child(
+                    div()
+                        .text_size(px(11.))
                         .text_color(color)
                         .child(SharedString::from(status_text)),
                 ),
@@ -259,17 +264,85 @@ fn file_row(idx: usize, file: &ImportFile) -> gpui::AnyElement {
         .into_any_element()
 }
 
+/// Scan selected folders off the UI thread, then index their MDX files in place.
 pub fn start_import(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui::App) {
-    let already_running = state
-        .read(cx)
-        .import_files
-        .iter()
-        .any(|f| matches!(f.status, ImportStatus::Copying | ImportStatus::Indexing));
+    if state.read(cx).import_files.iter().any(|f| {
+        matches!(
+            f.status,
+            ImportStatus::Scanning | ImportStatus::Pending | ImportStatus::Indexing
+        )
+    }) {
+        return;
+    }
+    if !paths.iter().any(|p| p.is_dir()) {
+        import_files(paths, state, cx);
+        return;
+    }
+    let row = state.read(cx).import_files.len();
+    cx.update_entity(&state, |s, cx| {
+        s.import_files.push(ImportFile {
+            path: paths[0].clone(),
+            name: "Dictionary folders".into(),
+            status: ImportStatus::Scanning,
+        });
+        cx.notify();
+    });
+    cx.spawn(async move |cx: &mut AsyncApp| {
+        let result = cx
+            .background_executor()
+            .spawn(async move {
+                let mut files = std::collections::BTreeSet::new();
+                let mut settings = mdict_rs::settings::current();
+                for path in paths {
+                    if path.is_dir() {
+                        let root = path.canonicalize()?;
+                        files.extend(mdict_rs::config::mdx_files_in_directory(&root)?);
+                        let root = root.to_string_lossy().into_owned();
+                        if !settings.dictionary_directories.contains(&root) {
+                            settings.dictionary_directories.push(root);
+                        }
+                    } else {
+                        files.insert(path);
+                    }
+                }
+                mdict_rs::settings::update(settings)?;
+                Ok::<_, anyhow::Error>(files.into_iter().collect::<Vec<_>>())
+            })
+            .await;
+        cx.update(|cx| {
+            cx.update_entity(&state, |s, cx| {
+                s.import_files[row].status = match &result {
+                    Ok(files) if files.is_empty() => ImportStatus::Error(
+                        "No MDX dictionaries found in the selected folders".into(),
+                    ),
+                    Ok(_) => ImportStatus::Done,
+                    Err(e) => ImportStatus::Error(format!("Cannot scan folders: {e}")),
+                };
+                cx.notify();
+            });
+            if let Ok(files) = result {
+                import_files(files, state, cx);
+            }
+        });
+    })
+    .detach();
+}
+
+fn import_files(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui::App) {
+    let already_running = state.read(cx).import_files.iter().any(|f| {
+        matches!(
+            f.status,
+            ImportStatus::Scanning | ImportStatus::Pending | ImportStatus::Indexing
+        )
+    });
     if already_running {
         return;
     }
 
-    let paths: Vec<PathBuf> = paths;
+    let paths: Vec<PathBuf> = paths
+        .into_iter()
+        .map(|p| p.canonicalize().unwrap_or(p))
+        .collect();
     let (mdx_mdd, non_mdx_mdd): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|p| {
         p.extension()
             .map(|e| e.eq_ignore_ascii_case("mdx") || e.eq_ignore_ascii_case("mdd"))
@@ -307,22 +380,13 @@ pub fn start_import(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui
         })
         .collect();
 
-    let dicts_dir = mdict_rs::config::dirs_config_path();
-    let existing_stems: std::collections::HashSet<String> = std::fs::read_dir(&dicts_dir)
-        .ok()
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| {
-            let path = e.path();
-            if path.extension()?.eq_ignore_ascii_case("mdx")
-                || path.extension()?.eq_ignore_ascii_case("mdd")
-            {
-                path.file_stem()
-                    .and_then(|s| s.to_str().map(|s| s.to_lowercase()))
-            } else {
-                None
-            }
+    let existing_stems: std::collections::HashSet<String> = mdict_rs::settings::current()
+        .dictionaries
+        .iter()
+        .filter_map(|d| {
+            PathBuf::from(&d.path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_lowercase())
         })
         .collect();
 
@@ -417,191 +481,32 @@ pub fn start_import(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui
 
     // Indices of the valid entries we just pushed (invalid ones come first in the batch).
     let valid_start = base_idx + invalid.len();
-    let valid_end = valid_start + valid.len();
-
-    #[derive(Default)]
-    struct StemGroup {
-        mdx_idx: Option<usize>,
-        files: Vec<(usize, PathBuf)>,
-    }
-
     cx.spawn(async move |cx: &mut AsyncApp| {
         let import_started = std::time::Instant::now();
         let mut total_bytes: u64 = 0;
-        let mut stems: std::collections::HashMap<String, StemGroup> =
-            std::collections::HashMap::new();
+        for (offset, source_path) in valid.into_iter().enumerate() {
+            let idx = valid_start + offset;
+            total_bytes = total_bytes.saturating_add(
+                std::fs::metadata(&source_path)
+                    .map(|m| m.len())
+                    .unwrap_or(0),
+            );
+            let source_str = source_path.to_string_lossy().to_string();
 
-        for idx in valid_start..valid_end {
-            let (path, stem_lower) = cx.update(|cx| {
-                let f = &state.read(cx).import_files[idx];
-                let stem = f
-                    .path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown");
-                let stem_lower = stem.to_lowercase();
-                (f.path.clone(), stem_lower)
-            });
-
-            let group = stems.entry(stem_lower).or_default();
-            let ext = path
+            let is_mdd = source_path
                 .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.to_lowercase());
-            if ext.as_deref() == Some("mdx") {
-                group.mdx_idx = Some(idx);
-            }
-            group.files.push((idx, path));
-        }
+                .map(|e| e.eq_ignore_ascii_case("mdd"))
+                .unwrap_or(false);
+            let is_css_js_png = source_path
+                .extension()
+                .map(|e| {
+                    e.eq_ignore_ascii_case("css")
+                        || e.eq_ignore_ascii_case("js")
+                        || e.eq_ignore_ascii_case("png")
+                })
+                .unwrap_or(false);
 
-        for (stem, group) in stems {
-            let stem_path = dicts_dir.join(&stem);
-
-            if let Err(e) = std::fs::create_dir_all(&stem_path) {
-                dicto_telemetry::get().track(dicto_telemetry::Event::ErrorOccurred {
-                    kind: dicto_telemetry::ErrorKind::Import,
-                    message: format!("cannot create dict folder: {e}"),
-                });
-                for (idx, _) in &group.files {
-                    cx.update(|cx| {
-                        cx.update_entity(&state, |s, cx| {
-                            if let Some(f) = s.import_files.get_mut(*idx) {
-                                f.status =
-                                    ImportStatus::Error(format!("Cannot create dict folder: {e}"));
-                            }
-                            cx.notify();
-                        });
-                    });
-                }
-                continue;
-            }
-
-            for (idx, src_path) in group.files {
-                let filename = src_path.file_name().unwrap_or_default();
-                let dest_path = stem_path.join(filename);
-
-                cx.update(|cx| {
-                    cx.update_entity(&state, |s, cx| {
-                        if let Some(f) = s.import_files.get_mut(idx) {
-                            f.status = ImportStatus::Copying;
-                        }
-                        cx.notify();
-                    });
-                });
-
-                match std::fs::copy(&src_path, &dest_path) {
-                    Ok(bytes) => total_bytes = total_bytes.saturating_add(bytes),
-                    Err(e) => {
-                        dicto_telemetry::get().track(dicto_telemetry::Event::ErrorOccurred {
-                            kind: dicto_telemetry::ErrorKind::Import,
-                            message: format!("copy failed: {e}"),
-                        });
-                        cx.update(|cx| {
-                            cx.update_entity(&state, |s, cx| {
-                                if let Some(f) = s.import_files.get_mut(idx) {
-                                    f.status = ImportStatus::Error(format!("Copy failed: {e}"));
-                                }
-                                cx.notify();
-                            });
-                        });
-                        continue;
-                    }
-                }
-
-                let dest_str = dest_path.to_string_lossy().to_string();
-
-                let is_mdd = dest_path
-                    .extension()
-                    .map(|e| e.eq_ignore_ascii_case("mdd"))
-                    .unwrap_or(false);
-                let is_css_js_png = dest_path
-                    .extension()
-                    .map(|e| {
-                        e.eq_ignore_ascii_case("css")
-                            || e.eq_ignore_ascii_case("js")
-                            || e.eq_ignore_ascii_case("png")
-                    })
-                    .unwrap_or(false);
-
-                if is_mdd {
-                    cx.update(|cx| {
-                        cx.update_entity(&state, |s, cx| {
-                            if let Some(f) = s.import_files.get_mut(idx) {
-                                f.status = ImportStatus::Done;
-                            }
-                            cx.notify();
-                        });
-                    });
-                    continue;
-                }
-
-                if is_css_js_png {
-                    cx.update(|cx| {
-                        cx.update_entity(&state, |s, cx| {
-                            if let Some(f) = s.import_files.get_mut(idx) {
-                                f.status = ImportStatus::Done;
-                            }
-                            cx.notify();
-                        });
-                    });
-                    continue;
-                }
-
-                cx.update(|cx| {
-                    cx.update_entity(&state, |s, cx| {
-                        if let Some(f) = s.import_files.get_mut(idx) {
-                            f.status = ImportStatus::Indexing;
-                        }
-                        cx.notify();
-                    });
-                });
-
-                cx.update(|_cx| {
-                    let mut settings = mdict_rs::settings::current();
-                    if !settings.dictionaries.iter().any(|d| d.path == dest_str) {
-                        settings.dictionaries.push(DictEntry {
-                            path: dest_str.clone(),
-                            enabled: true,
-                            short_name: String::new(),
-                        });
-                        if let Err(e) = mdict_rs::settings::update(settings) {
-                            warn!("import_panel: failed to update settings for {dest_str}: {e}");
-                        }
-                    }
-                    mdict_rs::config::reset_pools();
-                });
-
-                let index_result = cx
-                    .background_executor()
-                    .spawn(async move {
-                        if let Some(dict) = mdict_rs::formats::detect(&dest_str) {
-                            dict.build_index(false)
-                        } else {
-                            Err(anyhow::anyhow!("unrecognized dictionary format"))
-                        }
-                    })
-                    .await;
-
-                if let Err(e) = index_result {
-                    warn!("import_panel: index failed: {e}");
-                    dicto_telemetry::get().track(dicto_telemetry::Event::ErrorOccurred {
-                        kind: dicto_telemetry::ErrorKind::Import,
-                        message: format!("index failed: {e}"),
-                    });
-                    cx.update(|cx| {
-                        cx.update_entity(&state, |s, cx| {
-                            if let Some(f) = s.import_files.get_mut(idx) {
-                                f.status = ImportStatus::Error(format!("Index failed: {e}"));
-                            }
-                            cx.notify();
-                        });
-                    });
-                    continue;
-                }
-
-                mdict_rs::registry::reload();
-                indexing::load_stylesheets();
-
+            if is_mdd || is_css_js_png {
                 cx.update(|cx| {
                     cx.update_entity(&state, |s, cx| {
                         if let Some(f) = s.import_files.get_mut(idx) {
@@ -610,7 +515,80 @@ pub fn start_import(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui
                         cx.notify();
                     });
                 });
+                continue;
             }
+
+            cx.update(|cx| {
+                cx.update_entity(&state, |s, cx| {
+                    if let Some(f) = s.import_files.get_mut(idx) {
+                        f.status = ImportStatus::Indexing;
+                    }
+                    cx.notify();
+                });
+            });
+
+            let registration = cx.update(|_cx| {
+                let mut settings = mdict_rs::settings::current();
+                if !settings.dictionaries.iter().any(|d| d.path == source_str) {
+                    settings.dictionaries.push(DictEntry {
+                        path: source_str.clone(),
+                        enabled: true,
+                        short_name: String::new(),
+                    });
+                    mdict_rs::settings::update(settings)?;
+                }
+                Ok::<_, anyhow::Error>(())
+            });
+            if let Err(e) = registration {
+                cx.update(|cx| {
+                    cx.update_entity(&state, |s, cx| {
+                        s.import_files[idx].status =
+                            ImportStatus::Error(format!("Cannot save dictionary: {e}"));
+                        cx.notify();
+                    });
+                });
+                continue;
+            }
+
+            let index_result = cx
+                .background_executor()
+                .spawn(async move {
+                    if let Some(dict) = mdict_rs::formats::detect(&source_str) {
+                        dict.build_index(false)
+                    } else {
+                        Err(anyhow::anyhow!("unrecognized dictionary format"))
+                    }
+                })
+                .await;
+
+            if let Err(e) = index_result {
+                warn!("import_panel: index failed: {e}");
+                dicto_telemetry::get().track(dicto_telemetry::Event::ErrorOccurred {
+                    kind: dicto_telemetry::ErrorKind::Import,
+                    message: format!("index failed: {e}"),
+                });
+                cx.update(|cx| {
+                    cx.update_entity(&state, |s, cx| {
+                        if let Some(f) = s.import_files.get_mut(idx) {
+                            f.status = ImportStatus::Error(format!("Index failed: {e}"));
+                        }
+                        cx.notify();
+                    });
+                });
+                continue;
+            }
+
+            mdict_rs::registry::reload();
+            indexing::load_stylesheets();
+
+            cx.update(|cx| {
+                cx.update_entity(&state, |s, cx| {
+                    if let Some(f) = s.import_files.get_mut(idx) {
+                        f.status = ImportStatus::Done;
+                    }
+                    cx.notify();
+                });
+            });
         }
 
         cx.update(|cx| {
@@ -622,8 +600,8 @@ pub fn start_import(paths: Vec<PathBuf>, state: Entity<DictState>, cx: &mut gpui
 
         // Fire one aggregate event for the whole batch: the count of enabled
         // dictionaries after the import, never the names/paths. Duration
-        // covers the whole batch (copy + index) from task start to here.
-        // Size is total bytes copied, rounded to the nearest MB — rounding
+        // covers registration and indexing from task start to here.
+        // Size is total selected source bytes, rounded to the nearest MB — rounding
         // breaks the precise size fingerprint while preserving perf signal.
         let count = mdict_rs::settings::enabled_mdx().len();
         let size_mb = (total_bytes + 500_000) / 1_000_000;
