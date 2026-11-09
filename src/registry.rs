@@ -87,7 +87,7 @@ impl DictionaryRegistry {
     pub fn css_for_dict(&self, name: &str) -> Vec<(String, String)> {
         self.dictionaries
             .iter()
-            .find(|d| d.name() == name)
+            .find(|d| d.stem() == name || d.name() == name)
             .map(|d| d.css_resources())
             .unwrap_or_default()
     }
@@ -128,6 +128,17 @@ pub fn lookup_resource(path: &str) -> Option<Vec<u8>> {
 
 pub fn css_for_dict(name: &str) -> Vec<(String, String)> {
     REGISTRY.read().unwrap().css_for_dict(name)
+}
+
+/// Resolve an asset only within its owning dictionary.
+pub fn resource_for_dict(stem: &str, path: &str) -> Option<Vec<u8>> {
+    REGISTRY
+        .read()
+        .unwrap()
+        .dictionaries
+        .iter()
+        .find(|d| d.stem() == stem)?
+        .resource(path)
 }
 
 pub fn all_css() -> Vec<(String, Vec<(String, String)>)> {

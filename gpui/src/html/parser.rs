@@ -110,6 +110,27 @@ pub fn parse_with_styles(html: &str, styles: &Stylesheet) -> Vec<Block> {
     build_blocks(events, styles)
 }
 
+/// Stylesheets explicitly linked by an entry, in document order.
+pub fn linked_stylesheets(html: &str) -> Vec<String> {
+    tokenize(html)
+        .into_iter()
+        .filter_map(|event| {
+            let Event::SelfClose(name, attrs) = event else {
+                return None;
+            };
+            if name != "link"
+                || !attrs
+                    .get("rel")?
+                    .split_whitespace()
+                    .any(|v| v.eq_ignore_ascii_case("stylesheet"))
+            {
+                return None;
+            }
+            attrs.get("href").map(|href| decode_entities(href))
+        })
+        .collect()
+}
+
 fn tokenize(html: &str) -> Vec<Event> {
     let mut out = Vec::new();
     let mut buf = String::new();
@@ -1024,4 +1045,28 @@ fn collapse_whitespace(s: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod linked_css_tests {
+    use super::*;
+
+    #[test]
+    fn linked_css_restores_block_boundaries() {
+        let html = "<LINK REL='stylesheet' HREF='oalecd9.css?v=1&amp;theme=light'><sn-g>first</sn-g><sn-g>second</sn-g>";
+        assert_eq!(
+            linked_stylesheets(html),
+            vec!["oalecd9.css?v=1&theme=light"]
+        );
+        let unstyled = parse_with_styles(html, &Stylesheet::default());
+        let styled = parse_with_styles(html, &Stylesheet::parse("sn-g { display: block; }"));
+        assert_eq!(unstyled.len(), 1);
+        assert_eq!(styled.len(), 2);
+    }
+
+    #[test]
+    fn linked_css_preserves_order_and_ignores_other_links() {
+        let html = "<!-- <link rel='stylesheet' href='ignored.css'> --><link rel='icon' href='icon.png'><link href='base.css' rel='stylesheet'/><link rel='stylesheet' href='theme.css'>";
+        assert_eq!(linked_stylesheets(html), vec!["base.css", "theme.css"]);
+    }
 }

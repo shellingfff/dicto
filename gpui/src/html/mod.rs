@@ -29,12 +29,51 @@ pub static STYLESHEETS: LazyLock<RwLock<HashMap<String, Stylesheet>>> =
 /// Parse HTML against the stylesheet registered for `dict_name`.
 /// Falls back to an empty stylesheet if none is registered.
 pub fn parse_styled(html: &str, dict_name: &str) -> Vec<Block> {
-    let map = STYLESHEETS.read().unwrap();
-    let empty = Stylesheet::default();
-    let sheet = map.get(dict_name).unwrap_or(&empty);
-    parse_with_styles(html, sheet)
+    let mut sheet = STYLESHEETS
+        .read()
+        .unwrap()
+        .get(dict_name)
+        .cloned()
+        .unwrap_or_default();
+    for href in parser::linked_stylesheets(html) {
+        if let Some(linked) = load_linked_stylesheet(dict_name, &href) {
+            sheet.extend(linked);
+        }
+    }
+    parse_with_styles(html, &sheet)
+}
+
+static LINKED_STYLES: LazyLock<RwLock<HashMap<(String, String), Stylesheet>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+fn load_linked_stylesheet(dict_name: &str, href: &str) -> Option<Stylesheet> {
+    let path = href.trim().split(['?', '#']).next()?.replace('\\', "/");
+    if path.is_empty() || path.contains(':') || path.starts_with("//") {
+        return None;
+    }
+    let key = (dict_name.to_string(), path.clone());
+    if let Some(sheet) = LINKED_STYLES.read().unwrap().get(&key) {
+        return Some(sheet.clone());
+    }
+    let settings = mdict_rs::settings::current();
+    let dictionary = settings.dictionaries.iter().find(|d| {
+        std::path::Path::new(&d.path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            == Some(dict_name)
+    })?;
+    let directory = std::path::Path::new(&dictionary.path).parent()?;
+    let local_path = directory.join(path.trim_start_matches('/'));
+    let body = std::fs::read_to_string(local_path).ok().or_else(|| {
+        let bytes = mdict_rs::registry::resource_for_dict(dict_name, &path)?;
+        String::from_utf8(bytes).ok()
+    })?;
+    let sheet = Stylesheet::parse(&body);
+    LINKED_STYLES.write().unwrap().insert(key, sheet.clone());
+    Some(sheet)
 }
 
 pub fn set_dict_styles(map: HashMap<String, Stylesheet>) {
     *STYLESHEETS.write().unwrap() = map;
+    LINKED_STYLES.write().unwrap().clear();
 }

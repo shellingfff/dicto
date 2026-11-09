@@ -193,7 +193,12 @@ Per-dictionary stylesheets (loaded at startup, see
   2. Sibling files on disk whose stem equals `<stem>` or starts
      with `<stem>_`.
 
-Other `.css` files in the directory are ignored — class names like
+Entry HTML can also link stylesheets with `<link rel="stylesheet" href="…">`.
+These are resolved relative to the MDX directory, with a fallback to that
+dictionary's MDD resources, and applied in link order. The CSS filename need
+not match the MDX filename. Unreferenced, unrelated CSS files remain ignored.
+
+Styles remain scoped per dictionary — class names like
 `.hw`, `.hwd`, `.pos` are reused with different meanings across
 dictionaries, so a global stylesheet would silently break some of
 them.
