@@ -10,12 +10,12 @@ arch=('x86_64')
 url="https://github.com/logi-camp/dicto"
 license=('AGPL-3.0-or-later')
 depends=(
-  'gtk3'
-  'alsa-lib'
-  'libxkbcommon'
-  'xdotool'
+  'webkit2gtk-4.1'
+  'gst-plugins-good'
+  'libappindicator-gtk3'
   'hicolor-icon-theme'
 )
+
 makedepends=(
   'cargo'
   'git'
@@ -23,10 +23,7 @@ makedepends=(
   'clang'
   'pkgconf'
 )
-optdepends=(
-  'vulkan-driver: GPU rendering'
-  'vulkan-intel: Intel GPU support'
-)
+optdepends=('gst-plugins-bad: additional audio codecs')
 options=(!lto)
 
 source=("$pkgname-$pkgver.tar.gz::https://github.com/logi-camp/dicto/archive/refs/tags/v${pkgver}.tar.gz")

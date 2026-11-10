@@ -1,5 +1,7 @@
 [workspace]
-members = [".", "gpui"]
+members = [".", "desktop"]
+exclude = ["gpui"]
+default-members = ["desktop"]
 
 [package]
 name = "mdict-rs"

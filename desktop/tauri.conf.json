@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Dicto",
+  "version": "0.7.0",
+  "identifier": "io.github.shellingfff.dicto",
+  "build": {
+    "frontendDist": "../frontend"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Dicto",
+        "width": 920,
+        "height": 680,
+        "minWidth": 480,
+        "minHeight": 360
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src dict: http://*.localhost; connect-src ipc: http://ipc.localhost",
+      "capabilities": [
+        {
+          "identifier": "main",
+          "windows": [
+            "main"
+          ],
+          "permissions": [
+            "core:default",
+            "allow-status",
+            "allow-search",
+            "allow-lookup",
+            "allow-get-settings",
+            "allow-save-settings",
+            "allow-choose-folder"
+          ]
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "category": "Education",
+    "shortDescription": "Offline dictionary"
+  }
+}

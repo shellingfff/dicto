@@ -1,0 +1,23 @@
+[package]
+name = "dicto"
+version = "0.7.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+build = "build.rs"
+
+[dependencies]
+mdict-rs = { path = ".." }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+mime_guess = "2"
+percent-encoding = "2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

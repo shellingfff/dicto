@@ -13,7 +13,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git gtk3 alsa-lib libxkbcommon libxkbcommon-x11 xdotool clang pkgconf upx
+          pacman -S --noconfirm base-devel git webkit2gtk-4.1 libappindicator-gtk3 clang pkgconf upx
 
       - uses: actions/checkout@v4
 
@@ -43,7 +43,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if [[ "$GITHUB_REF_NAME" != v* ]]; then
-            VERSION="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')"
+            VERSION="$(grep -m1 '^version' desktop/Cargo.toml | sed 's/.*"\(.*\)"/\1/')"
           fi
           pacman -S --noconfirm namcap
           for pkg in packaging/arch/dicto packaging/arch/dicto-bin; do

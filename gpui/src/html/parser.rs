@@ -41,7 +41,7 @@ pub enum Block {
         layout: BlockLayout,
     },
     ListItem {
-        ordered: bool,
+        marker: Option<SharedString>,
         depth: u8,
         content: Vec<Inline>,
     },
@@ -365,12 +365,32 @@ struct OpenElement {
     hidden: bool,
 }
 
+/// Keep numbering on list items, not on paragraph flushes within an item.
+struct ListState {
+    next_number: Option<i64>,
+    item: Option<ListItemState>,
+}
+
+struct ListItemState {
+    marker: Option<SharedString>,
+}
+
+// Keep the original tag for CSS matching, but recognize XHTML list semantics.
+fn list_tag(name: &str) -> &str {
+    match name {
+        "xhtml:ol" => "ol",
+        "xhtml:ul" => "ul",
+        "xhtml:li" => "li",
+        _ => name,
+    }
+}
+
 struct Builder {
     blocks: Vec<Block>,
     inline_buf: Vec<Inline>,
     style_stack: Vec<Style>,
     link_stack: Vec<Link>,
-    list_stack: Vec<bool>, // bool = ordered?
+    list_stack: Vec<ListState>,
     element_stack: Vec<OpenElement>,
     /// > 0 while we're inside a `display: none` subtree.
     skip_depth: u32,
@@ -432,11 +452,15 @@ impl Builder {
         }
         let runs = std::mem::take(&mut self.inline_buf);
         let layout = self.current_layout();
-        if self.list_stack.last().is_some() {
-            let ordered = *self.list_stack.last().unwrap();
+        let depth = self.list_stack.len() as u8;
+        if let Some(item) = self
+            .list_stack
+            .last_mut()
+            .and_then(|list| list.item.as_mut())
+        {
             self.blocks.push(Block::ListItem {
-                ordered,
-                depth: self.list_stack.len() as u8,
+                marker: item.marker.take(),
+                depth,
                 content: runs,
             });
         } else {
@@ -851,13 +875,13 @@ fn handle_open(
 
     // Hard-coded block-level HTML tags (independent of CSS).
     let default_block = matches!(
-        name,
+        list_tag(name),
         "p" | "div" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "ul" | "ol" | "li" | "table" | "tr"
     ) && !is_inline_wrapper(name, &classes);
     let block_display = display_is_block(decls.get("display"), default_block);
 
     // Pre-flush so block-level content starts on its own paragraph.
-    if block_display {
+    if block_display || matches!(list_tag(name), "ol" | "ul" | "li") {
         b.flush_paragraph();
     }
 
@@ -891,7 +915,7 @@ fn handle_open(
     });
 
     // Tag-specific behaviors that go beyond styling.
-    match name {
+    match list_tag(name) {
         "a" => {
             let href = attrs.get("href").cloned().unwrap_or_default();
             if !href.is_empty() {
@@ -900,8 +924,32 @@ fn handle_open(
                 b.link_stack.push(Link::External(SharedString::default()));
             }
         }
-        "ul" => b.list_stack.push(false),
-        "ol" => b.list_stack.push(true),
+        "ul" | "ol" => b.list_stack.push(ListState {
+            next_number: (list_tag(name) == "ol").then(|| {
+                attrs
+                    .get("start")
+                    .and_then(|v| v.trim().parse().ok())
+                    .unwrap_or(1)
+            }),
+            item: None,
+        }),
+        "li" => {
+            if let Some(list) = b.list_stack.last_mut() {
+                let marker = if let Some(next) = list.next_number.as_mut() {
+                    let number = attrs
+                        .get("value")
+                        .and_then(|v| v.trim().parse().ok())
+                        .unwrap_or(*next);
+                    *next = number.saturating_add(1);
+                    format!("{number}.")
+                } else {
+                    "•".to_string()
+                };
+                list.item = Some(ListItemState {
+                    marker: Some(marker.into()),
+                });
+            }
+        }
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
             let level = name.as_bytes()[1] - b'0';
             *pending_heading = Some(level);
@@ -947,7 +995,7 @@ fn handle_close(b: &mut Builder, name: &str, pending_heading: &mut Option<u8>) {
         return;
     }
 
-    if open.block_display {
+    if open.block_display || matches!(list_tag(name), "ol" | "ul" | "li") {
         if matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6") {
             if let Some(level) = pending_heading.take() {
                 b.flush_heading(level);
@@ -963,7 +1011,12 @@ fn handle_close(b: &mut Builder, name: &str, pending_heading: &mut Option<u8>) {
         b.close_style();
     }
 
-    match name {
+    match list_tag(name) {
+        "li" => {
+            if let Some(list) = b.list_stack.last_mut() {
+                list.item = None;
+            }
+        }
         "a" => {
             // If this was a sound link that produced no inline content
             // (e.g. <a href="sound://..." class="fa fa-volume-up"></a>),
@@ -1004,7 +1057,7 @@ fn auto_close_top(b: &mut Builder) {
         }
         return;
     }
-    if open.block_display {
+    if open.block_display || matches!(list_tag(&open.tag), "ol" | "ul" | "li") {
         b.flush_paragraph();
     }
     if open.style_pushed {
@@ -1012,8 +1065,12 @@ fn auto_close_top(b: &mut Builder) {
     }
     if open.tag == "a" {
         b.link_stack.pop();
-    } else if open.tag == "ul" || open.tag == "ol" {
+    } else if matches!(list_tag(&open.tag), "ul" | "ol") {
         b.list_stack.pop();
+    } else if list_tag(&open.tag) == "li" {
+        if let Some(list) = b.list_stack.last_mut() {
+            list.item = None;
+        }
     }
 }
 
@@ -1097,5 +1154,83 @@ mod linked_css_tests {
     fn linked_css_preserves_order_and_ignores_other_links() {
         let html = "<!-- <link rel='stylesheet' href='ignored.css'> --><link rel='icon' href='icon.png'><link href='base.css' rel='stylesheet'/><link rel='stylesheet' href='theme.css'>";
         assert_eq!(linked_stylesheets(html), vec!["base.css", "theme.css"]);
+    }
+}
+
+#[cfg(test)]
+mod list_tests {
+    use super::*;
+
+    fn items(html: &str, css: &str) -> Vec<(Option<String>, u8, String)> {
+        parse_with_styles(html, &Stylesheet::parse(css))
+            .into_iter()
+            .filter_map(|block| {
+                if let Block::ListItem {
+                    marker,
+                    depth,
+                    content,
+                } = block
+                {
+                    Some((
+                        marker.map(|m| m.to_string()),
+                        depth,
+                        content.iter().map(|r| r.text.as_ref()).collect(),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn xhtml_senses_honor_separate_start_values() {
+        let html = "<sn-blk><xhtml:ol start='1'><xhtml:li><licontent><sn-g>greeting</sn-g></licontent></xhtml:li></xhtml:ol></sn-blk><sn-blk><xhtml:ol start='2'><xhtml:li><sn-g>attention</sn-g></xhtml:li></xhtml:ol></sn-blk><sn-blk><xhtml:ol start='3'><xhtml:li><sn-g>surprise</sn-g></xhtml:li></xhtml:ol></sn-blk>";
+        assert_eq!(
+            items(html, "sn-blk, sn-g { display: block; }"),
+            vec![
+                (Some("1.".into()), 1, "greeting".into()),
+                (Some("2.".into()), 1, "attention".into()),
+                (Some("3.".into()), 1, "surprise".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn nested_lists_and_paragraphs_do_not_increment_outer_number() {
+        let html = "<ol start='2'><li><p>first</p><p>continuation</p><ul><li>bullet</li></ul>tail</li><li>next</li></ol>";
+        assert_eq!(
+            items(html, ""),
+            vec![
+                (Some("2.".into()), 1, "first".into()),
+                (None, 1, "continuation".into()),
+                (Some("•".into()), 2, "bullet".into()),
+                (None, 1, "tail".into()),
+                (Some("3.".into()), 1, "next".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn ordered_lists_support_defaults_item_values_and_zero() {
+        let html = "<ol start='invalid'><li>a</li><li value='0'>b</li><li>c</li><li value='-2'>d</li><li>e</li></ol>";
+        let markers: Vec<_> = items(html, "").into_iter().map(|i| i.0).collect();
+        assert_eq!(
+            markers,
+            ["1.", "0.", "1.", "-2.", "-1."].map(|s| Some(s.to_string()))
+        );
+    }
+
+    #[test]
+    fn hidden_lists_do_not_change_visible_numbering() {
+        let html =
+            "<ol><li>a</li><li class='hidden'>hidden<ol><li>nested</li></ol></li><li>b</li></ol>";
+        assert_eq!(
+            items(html, ".hidden { display: none; }"),
+            vec![
+                (Some("1.".into()), 1, "a".into()),
+                (Some("2.".into()), 1, "b".into()),
+            ]
+        );
     }
 }

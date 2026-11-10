@@ -47,10 +47,10 @@ fn render_block(idx: usize, block: &Block) -> gpui::AnyElement {
             layout,
         } => with_layout(heading(idx, *level, runs), layout),
         Block::ListItem {
-            ordered,
+            marker,
             depth,
             content,
-        } => list_item(idx, *ordered, *depth, content),
+        } => list_item(idx, marker.as_ref(), *depth, content),
         Block::Divider => divider(),
         Block::Image(src) => image_block(idx, src.as_ref()),
     }
@@ -113,7 +113,12 @@ fn with_layout(inner: gpui::AnyElement, layout: &BlockLayout) -> gpui::AnyElemen
     el.child(inner).into_any_element()
 }
 
-fn list_item(idx: usize, _ordered: bool, depth: u8, content: &[Inline]) -> gpui::AnyElement {
+fn list_item(
+    idx: usize,
+    marker: Option<&SharedString>,
+    depth: u8,
+    content: &[Inline],
+) -> gpui::AnyElement {
     let indent = px(16.0 * depth as f32);
     h_flex()
         .w_full()
@@ -125,7 +130,8 @@ fn list_item(idx: usize, _ordered: bool, depth: u8, content: &[Inline]) -> gpui:
                 .flex_shrink_0()
                 .text_size(px(14.))
                 .text_color(colors::text_secondary())
-                .child("•"),
+                .min_w(px(20.))
+                .child(marker.cloned().unwrap_or_default()),
         )
         .child(
             div()

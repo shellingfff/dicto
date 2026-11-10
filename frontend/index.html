@@ -1,0 +1,6 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dicto</title><link rel="stylesheet" href="app.css"></head>
+<body><header><input id="search" type="search" placeholder="Search words…" aria-label="Search words" autofocus autocomplete="off" spellcheck="false"><button id="settings-open" title="Settings">⚙</button></header>
+<div id="status" role="status"></div><nav id="tabs" aria-label="Dictionaries"></nav><main><h1 id="word"></h1><p id="empty">Type a word to look it up.</p><iframe id="definition" title="Dictionary definition" sandbox="allow-scripts allow-same-origin" hidden></iframe></main>
+<dialog id="settings"><form method="dialog"><h2>Dictionaries</h2><p>Choose a folder to load its dictionaries, including subfolders. Source files stay in place.</p><div id="folders"></div><button id="add-folder" type="button">Choose folder…</button><button id="rescan" type="button">Rescan</button><div id="dictionary-list"></div><p id="settings-error" role="alert"></p><footer><button value="cancel">Cancel</button><button id="save" type="button">Save</button></footer><small>Dicto 0.7 · Offline dictionary · AGPL-3.0-or-later</small></form></dialog>
+<script src="app.js"></script></body></html>

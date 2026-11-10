@@ -8,9 +8,9 @@
 
 ## Features
 
-- **Minimal, native UI** — built on GPUI (the engine behind Zed), renders at 120 fps with no Electron overhead
-- **Instant search** — suggestions appear as you type, results load in milliseconds
-- **Faithful rendering** — full HTML output with per-dictionary CSS so each dict looks exactly as its author intended
+- **Tauri frontend** — system web rendering with a Rust backend; no Node runtime or frontend build tool required
+- **Instant search** — definitions update as you type; navigate matching words with Ctrl+N/P
+- **Faithful rendering** — HTML, CSS, and JavaScript rendered in isolated dictionary frames
 - **Multi-dictionary** — load as many MDX files as you like, enable/disable/reorder them without restarting
 
 ## Installation
@@ -55,7 +55,7 @@ makepkg -si
 | `dicto-*-windows-x86_64-installer.exe` | Installer |
 | `dicto-*-windows-x86_64-portable.zip` | Portable (no install needed) |
 
-Requires [Visual C++ Redistributable (VC_redist.x64.exe)](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+Requires Microsoft Edge WebView2 Runtime and the [Visual C++ Redistributable (VC_redist.x64.exe)](https://aka.ms/vs/17/release/vc_redist.x64.exe). The portable executable does not bundle WebView2.
 
 ### From source
 
@@ -71,7 +71,16 @@ after building, and ensure `~/.local/bin` is in your `PATH`.
 Repeat the build and install commands to update. Packaging can use
 `make install DESTDIR=/path/to/staging PREFIX=/usr`.
 
-**Runtime dependencies:** `gtk3`, `alsa-lib`, `libxkbcommon`, `lzo`
+**Linux dependencies:** WebKitGTK 4.1, GTK 3, and libappindicator. On Arch:
+
+```bash
+sudo pacman -S --needed base-devel rust webkit2gtk-4.1 libappindicator-gtk3 gst-plugins-good
+```
+
+GStreamer (`gst-plugins-good`) supplies the audio sink and common pronunciation
+codecs; `gst-plugins-bad` adds other formats. Windows requires the WebView2 runtime.
+Use `cargo run -p dicto` for development; the static frontend is embedded into
+the binary by Tauri. `make check` runs backend tests and JavaScript syntax checks.
 
 ## Keyboard shortcuts
 
@@ -82,7 +91,7 @@ Repeat the build and install commands to update. Packaging can use
 ## Dictionary setup
 
 
-**Option 1 — Use existing files:** Open Settings → Import and select a directory. Dicto recursively finds all `.mdx` dictionaries, registers their original paths without copying them, and remembers the directory to discover new dictionaries on subsequent launches. You can also drag individual dictionary files into the import panel. Keep companion `.mdd` and CSS files alongside the MDX. Search indexes (`.fst` and `.offsets`) are written beside the source files, so the directory must be writable. Keep the files in place after adding them.
+**Option 1 — Use existing files:** Open Settings and choose a folder. Dicto recursively finds all `.mdx` dictionaries, registers their original paths without copying them, and remembers the directory to discover new dictionaries on subsequent launches. Keep companion `.mdd` and CSS files alongside the MDX. Search indexes (`.fst` and `.offsets`) are written beside the source files, so the directory must be writable. Keep the files in place after adding them.
 
 **Option 2 — Drop files manually:** Place `.mdx` (and optional `.mdd`) files into:
 
@@ -104,10 +113,18 @@ Enable, disable, and reorder dictionaries from the settings dialog (⚙ button).
 
 ## Architecture
 
-The workspace has two crates:
+The active workspace has two crates:
 
-- **`mdict-rs`** (library) — MDX/MDD parser, redb indexer, query pipeline, settings
-- **`dicto`** (binary) — GPUI desktop app
+- **`mdict-rs`** (library) — MDX/MDD parser, FST/offset indexes, query pipeline, settings
+- **`dicto`** (`desktop/`) — Tauri desktop shell and commands
+
+`frontend/` contains the interface and dictionary frame bridge. Definition HTML
+is served through a dictionary-specific protocol with local/MDD CSS, JavaScript,
+images, audio, and fonts. Source dictionaries stay in place. Dictionary frames
+are sandboxed and do not receive native application permissions.
+
+The former frontend remains in `gpui/` as reference during migration, excluded
+from the active workspace and normal builds.
 
 
 ## References

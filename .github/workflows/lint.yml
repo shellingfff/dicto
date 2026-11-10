@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git gtk3 alsa-lib libxkbcommon libxkbcommon-x11 xdotool clang pkgconf
+          pacman -S --noconfirm base-devel git webkit2gtk-4.1 libappindicator-gtk3 clang pkgconf
 
       - uses: actions/checkout@v4
 

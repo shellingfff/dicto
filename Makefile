@@ -1,4 +1,4 @@
-# Linux build/install and Windows cross-compilation.
+# Linux build/install and native Windows builds.
 # DESTDIR stages installation for packaging; PREFIX is the final install location.
 PREFIX ?= /usr/local
 DESTDIR ?=
@@ -7,7 +7,7 @@ LINUX_TARGET_DIR ?= target
 
 .DEFAULT_GOAL := linux
 
-.PHONY: linux install windows patch-gpui reset-patches icon build clean help
+.PHONY: linux install windows build check help
 
 # Build as your regular user before running a system-wide install with sudo.
 linux:
@@ -21,69 +21,20 @@ install:
 	install -Dm644 assets/icon.svg "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/dicto.svg"
 	install -Dm644 LICENSE "$(DESTDIR)$(PREFIX)/share/licenses/dicto/LICENSE"
 
-# Windows cross-compilation
-windows: patch-gpui icon build
-	@echo ""
-	@echo "=== Build successful ==="
-	@echo "Output: target/x86_64-pc-windows-msvc/debug/dicto.exe"
-	@ls -lh target/x86_64-pc-windows-msvc/debug/dicto.exe | awk '{print "Size:   " $$5}'
+# Native Windows builds use WebView2; install the MSVC Rust toolchain first.
+windows:
+	$(CARGO) build --locked --release --package dicto
 
-# Apply gpui patches (fixes cross-compilation issues)
-patch-gpui:
-	@echo "Applying gpui patches..."
-	@bash patch-gpui-build.sh || true
-	@echo "Done"
+build: linux
 
-# Generate Windows icon from SVG
-icon:
-	@echo "Generating Windows icon..."
-	@printf '%s\n%s\n' "32512 ICON \"icon.ico\"" "// Windows resource script" > gpui/icon.rc
-	@if ! command -v rsvg-convert >/dev/null 2>&1; then \
-		echo "ERROR: rsvg-convert is required for transparent icons (librsvg)." >&2; \
-		exit 1; \
-	fi
-	@rsvg-convert -w 256 -h 256 -f png assets/icon.svg -o tmp_256.png
-	@rsvg-convert -w 128 -h 128 -f png assets/icon.svg -o tmp_128.png
-	@rsvg-convert -w 64 -h 64 -f png assets/icon.svg -o tmp_64.png
-	@rsvg-convert -w 32 -h 32 -f png assets/icon.svg -o tmp_32.png
-	@rsvg-convert -w 16 -h 16 -f png assets/icon.svg -o tmp_16.png
-	@magick tmp_256.png tmp_128.png tmp_64.png tmp_32.png tmp_16.png -alpha on -define icon:auto-resize=256,128,64,32,16 gpui/icon.ico
-	@rm -f tmp_*.png
-	@file gpui/icon.ico | cut -d: -f2- | head -c 80
+check:
+	$(CARGO) test --locked --workspace
+	node --check frontend/app.js
+	node --check frontend/definition.js
 
-# Build Windows .exe
-build:
-	@echo "Building Windows .exe..."
-	@cargo clean -p dicto --target x86_64-pc-windows-msvc
-	@cargo xwin build --target x86_64-pc-windows-msvc -p dicto
-
-# Clean build artifacts
-clean:
-	@echo "Cleaning..."
-	@rm -f gpui/icon.rc gpui/icon.ico
-	@cargo clean -p dicto --target x86_64-pc-windows-msvc
-	@echo "Cleaned Windows build artifacts"
-
-# Reset gpui patches (useful after cargo update)
-reset-patches:
-	@echo "Resetting gpui patches..."
-	@bash -c 'cd $$(find ~/.cargo/git/checkouts/zed-*/ae47ec9 -maxdepth 0 -type d 2>/dev/null | head -1) && git checkout -- crates/gpui/build.rs crates/gpui_windows/build.rs crates/gpui_windows/src/directx_renderer.rs'
-	@echo "Patches reset. Run 'make windows' to apply and rebuild."
-
-# Show help
 help:
-	@echo "Available targets:"
-	@echo "  make linux        - Build Linux release binary (default)"
-	@echo "  make install      - Install built binary, desktop launcher, icon and license"
-	@echo "                      PREFIX=/usr/local; supports DESTDIR staging"
-	@echo "  make windows      - Build Windows .exe"
-	@echo "  make patch-gpui   - Apply gpui cross-compilation patches only"
-	@echo "  make icon         - Generate Windows icon only"
-	@echo "  make build        - Build .exe (requires patches and icon)"
-	@echo "  make clean        - Clean Windows build artifacts"
-	@echo "  make reset-patches- Reset gpui patches (use after cargo update)"
-	@echo "  make help         - Show this help"
-	@echo ""
-	@echo "Example workflow:"
-	@echo "  1. make windows           # Full build (patches + icon + compile)"
-	@echo "  2. make icon && make build  # Generate icon and build separately"
+	@echo "make linux        Build the Tauri app (default)"
+	@echo "make install      Install binary, launcher, icon and license"
+	@echo "                  Supports PREFIX and DESTDIR"
+	@echo "make check        Run Rust tests and JavaScript syntax checks"
+	@echo "make windows      Build natively on Windows with MSVC/WebView2"
