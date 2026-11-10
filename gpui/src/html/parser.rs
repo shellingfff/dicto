@@ -353,6 +353,7 @@ fn classify_link(href: &str) -> Link {
 }
 
 struct OpenElement {
+    attributes: HashMap<String, String>,
     tag: String,
     classes: Vec<String>,
     id: Option<String>,
@@ -798,6 +799,7 @@ fn handle_open(
     // close events stay balanced; emit nothing.
     if b.skip_depth > 0 {
         b.element_stack.push(OpenElement {
+            attributes: attrs.clone(),
             tag: name.to_string(),
             classes,
             id,
@@ -814,12 +816,14 @@ fn handle_open(
         .element_stack
         .iter()
         .map(|e| ElementCtx {
+            attributes: &e.attributes,
             tag: &e.tag,
             classes: &e.classes,
             id: e.id.as_deref(),
         })
         .collect();
     let ctx = ElementCtx {
+        attributes: attrs,
         tag: name,
         classes: &classes,
         id: id.as_deref(),
@@ -833,6 +837,7 @@ fn handle_open(
 
     if hidden {
         b.element_stack.push(OpenElement {
+            attributes: attrs.clone(),
             tag: name.to_string(),
             classes,
             id,
@@ -876,6 +881,7 @@ fn handle_open(
     b.style_stack.push(style);
 
     b.element_stack.push(OpenElement {
+        attributes: attrs.clone(),
         tag: name.to_string(),
         classes,
         id,
@@ -1050,6 +1056,29 @@ fn collapse_whitespace(s: &str) -> String {
 #[cfg(test)]
 mod linked_css_tests {
     use super::*;
+
+    #[test]
+    fn attribute_override_keeps_greeting_inline() {
+        let css = Stylesheet::parse(
+            "xr-gs { display: table; } xr-gs[firstinblock=\"n\"] { display: inline; }",
+        );
+        let html = "used as a <xr-gs firstinblock='n' xt='ndv'><xr-g-blk><xr-g><xh-blk><xh><a href='entry://greeting'>greeting</a></xh></xh-blk></xr-g></xr-g-blk></xr-gs> when you meet somebody";
+        let blocks = parse_with_styles(html, &css);
+        assert_eq!(blocks.len(), 1);
+        let Block::Paragraph { runs, .. } = &blocks[0] else {
+            panic!("expected paragraph")
+        };
+        let text: String = runs.iter().map(|run| run.text.as_ref()).collect();
+        assert_eq!(text, "used as a greeting when you meet somebody");
+        assert!(runs.iter().any(
+            |run| matches!(&run.link, Some(Link::Entry(word)) if word.as_ref() == "greeting")
+        ));
+        // Other cross references must still retain their block layout.
+        assert_eq!(
+            parse_with_styles(&html.replace("firstinblock='n'", "firstinblock='y'"), &css).len(),
+            3
+        );
+    }
 
     #[test]
     fn linked_css_restores_block_boundaries() {

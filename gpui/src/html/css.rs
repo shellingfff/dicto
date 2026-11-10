@@ -4,12 +4,13 @@
 //! Merriam-Webster, hycd_3rd) actually use:
 //!
 //! - simple selectors: `tag`, `.class`, `#id`, `tag.class`
+//! - attribute presence and equality: `[name]`, `[name="value"]`
 //! - compound selectors via descendant combinator (whitespace)
 //! - selector lists separated by commas (`a, b { ... }`)
 //! - declarations: `name: value;` pairs inside `{ ... }`
 //! - block comments `/* ... */`
 //!
-//! Not supported: pseudo-classes, `::before`, attribute selectors,
+//! Not supported: pseudo-classes, `::before`, other attribute operators,
 //! adjacent/child combinators, media queries, `@import`, calc(), etc.
 //! Unrecognized constructs are skipped so the rest of the file still
 //! parses.
@@ -39,6 +40,7 @@ pub struct Compound {
     pub tag: Option<String>,
     pub classes: Vec<String>,
     pub id: Option<String>,
+    pub attributes: Vec<(String, Option<String>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +55,7 @@ pub struct ElementCtx<'a> {
     pub tag: &'a str,
     pub classes: &'a [String],
     pub id: Option<&'a str>,
+    pub attributes: &'a HashMap<String, String>,
 }
 
 impl Stylesheet {
@@ -171,46 +174,142 @@ fn compound_matches(c: &Compound, el: &ElementCtx<'_>) -> bool {
             return false;
         }
     }
+    for (name, expected) in &c.attributes {
+        let Some(actual) = el.attributes.get(name) else {
+            return false;
+        };
+        if expected.as_ref().is_some_and(|value| value != actual) {
+            return false;
+        }
+    }
     true
 }
 
-fn parse_selectors(text: &str) -> Vec<Selector> {
-    text.split(',')
-        .filter_map(|chunk| {
-            let parts: Vec<Compound> = chunk
-                .split_whitespace()
-                .filter_map(parse_compound)
-                .collect();
-            if parts.is_empty() {
-                None
-            } else {
-                Some(Selector { parts })
+// Split only outside attribute brackets and quoted values.
+fn split_selector(text: &str, separator: impl Fn(char) -> bool) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut depth = 0;
+    let mut quote = None;
+    let mut escaped = false;
+    for (i, c) in text.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if c == '\\' {
+            escaped = true;
+            continue;
+        }
+        if let Some(q) = quote {
+            if c == q {
+                quote = None;
             }
+            continue;
+        }
+        match c {
+            '\'' | '"' => quote = Some(c),
+            '[' => depth += 1,
+            ']' => depth -= 1,
+            _ if depth == 0 && separator(c) => {
+                if start < i {
+                    parts.push(&text[start..i]);
+                }
+                start = i + c.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    if start < text.len() {
+        parts.push(&text[start..]);
+    }
+    parts
+}
+
+fn parse_selectors(text: &str) -> Vec<Selector> {
+    split_selector(text, |c| c == ',')
+        .into_iter()
+        .filter_map(|chunk| {
+            let parts = split_selector(chunk.trim(), char::is_whitespace)
+                .into_iter()
+                .map(parse_compound)
+                .collect::<Option<Vec<_>>>()?;
+            (!parts.is_empty()).then_some(Selector { parts })
         })
         .collect()
 }
 
-fn parse_compound(token: &str) -> Option<Compound> {
-    // Strip combinators we don't handle (>, +, ~). For child-combinator-like
-    // tokens we just give up on the whole selector by returning None.
-    if token == ">" || token == "+" || token == "~" {
-        return None;
-    }
-    // Strip pseudo-classes / elements, e.g. "a:link", "p::before".
-    let token = match token.find(':') {
-        Some(p) => &token[..p],
-        None => token,
+fn parse_attribute(text: &str) -> Option<(String, Option<String>)> {
+    let (name, value) = match text.split_once('=') {
+        Some((name, value)) => {
+            let value = value.trim();
+            let value = if value.starts_with(['\'', '"']) {
+                let quote = value.chars().next()?;
+                if value.len() < 2 || !value.ends_with(quote) {
+                    return None;
+                }
+                &value[1..value.len() - 1]
+            } else {
+                if value.is_empty()
+                    || value
+                        .chars()
+                        .any(|c| c.is_whitespace() || matches!(c, '\'' | '"'))
+                {
+                    return None;
+                }
+                value
+            };
+            // Escaped CSS values and case flags are not supported yet.
+            if value.contains('\\') {
+                return None;
+            }
+            (name.trim(), Some(value.to_string()))
+        }
+        None => (text.trim(), None),
     };
-    if token.is_empty() {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return None;
     }
+    Some((name.to_ascii_lowercase(), value))
+}
 
+fn parse_compound(token: &str) -> Option<Compound> {
     let mut compound = Compound::default();
     let mut state = ParseState::Tag;
     let mut buf = String::new();
-
-    for c in token.chars() {
+    let mut chars = token.chars();
+    while let Some(c) = chars.next() {
         match c {
+            '[' => {
+                flush_token(&mut compound, &mut state, &mut buf);
+                let mut attribute = String::new();
+                let mut quote = None;
+                let mut closed = false;
+                for c in chars.by_ref() {
+                    if let Some(q) = quote {
+                        if c == q {
+                            quote = None;
+                        }
+                    } else if c == '\'' || c == '"' {
+                        quote = Some(c);
+                    } else if c == ']' {
+                        closed = true;
+                        break;
+                    }
+                    attribute.push(c);
+                }
+                if !closed || quote.is_some() {
+                    return None;
+                }
+                compound.attributes.push(parse_attribute(&attribute)?);
+            }
+            // Preserve existing handling of link pseudo-classes.
+            ':' => break,
+            '>' | '+' | '~' | ']' | '\\' => return None,
             '.' | '#' => {
                 flush_token(&mut compound, &mut state, &mut buf);
                 state = if c == '.' {
@@ -223,8 +322,12 @@ fn parse_compound(token: &str) -> Option<Compound> {
         }
     }
     flush_token(&mut compound, &mut state, &mut buf);
-
-    if compound.tag.is_none() && compound.classes.is_empty() && compound.id.is_none() {
+    if compound.tag.is_none()
+        && compound.classes.is_empty()
+        && compound.id.is_none()
+        && compound.attributes.is_empty()
+        && token != "*"
+    {
         return None;
     }
     Some(compound)
@@ -325,4 +428,77 @@ fn skip_at_rule(s: &str, i: &mut usize) -> bool {
     }
     *i = j;
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attribute_selectors_match_values_without_splitting_them() {
+        let attrs = HashMap::from([
+            ("firstinblock".into(), "n".into()),
+            ("title".into(), "a, b: [c].#d".into()),
+        ]);
+        let target = ElementCtx {
+            tag: "xr-gs",
+            classes: &[],
+            id: None,
+            attributes: &attrs,
+        };
+        for selector in [
+            "xr-gs[firstinblock=n]",
+            "[FIRSTINBLOCK = 'n']",
+            "xr-gs[firstinblock][title=\"a, b: [c].#d\"]",
+        ] {
+            let sheet = Stylesheet::parse(&format!("{selector} {{ display: inline; }}"));
+            assert_eq!(
+                sheet
+                    .matching(&target, &[])
+                    .get("display")
+                    .map(String::as_str),
+                Some("inline"),
+                "{selector}"
+            );
+        }
+        for selector in [
+            "[missing]",
+            "[firstinblock=y]",
+            "[firstinblock=N]",
+            "[firstinblock~=n]",
+            "[firstinblock='n' i]",
+            "[firstinblock='n'",
+            "[missing] xr-gs",
+        ] {
+            let sheet = Stylesheet::parse(&format!("{selector} {{ display: inline; }}"));
+            assert!(sheet.matching(&target, &[]).is_empty(), "{selector}");
+        }
+    }
+
+    #[test]
+    fn ancestor_attributes_and_selector_lists() {
+        let attrs = HashMap::from([("type".into(), "note".into())]);
+        let empty = HashMap::new();
+        let parent = ElementCtx {
+            tag: "unbox",
+            classes: &[],
+            id: None,
+            attributes: &attrs,
+        };
+        let child = ElementCtx {
+            tag: "p",
+            classes: &[],
+            id: None,
+            attributes: &empty,
+        };
+        let sheet = Stylesheet::parse("[unsupported~=x], unbox[type=note] p { display: inline; }");
+        assert!(sheet.matching(&child, &[]).is_empty());
+        assert_eq!(
+            sheet
+                .matching(&child, &[parent])
+                .get("display")
+                .map(String::as_str),
+            Some("inline")
+        );
+    }
 }
