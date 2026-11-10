@@ -4,4 +4,3 @@ pub mod import_panel;
 pub mod search_bar;
 pub mod settings_panel;
 pub mod settings_window;
-pub mod word_list;

@@ -10,7 +10,6 @@ use crate::colors;
 use crate::components::{
     detail_panel,
     search_bar::{self, SearchBarProps},
-    word_list::{self, WordListProps},
 };
 use crate::state::{DictResult, DictState};
 
@@ -138,6 +137,14 @@ impl DictApp {
         cx.update_entity(&input, |input_state, cx| {
             input_state.focus(window, cx);
         });
+
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() && !window.has_active_dialog(cx) {
+                cx.update_entity(&this.input, |input, cx| input.focus(window, cx));
+                window.dispatch_action(Box::new(gpui_component::input::SelectAll), cx);
+            }
+        })
+        .detach();
 
         // Input and focus actions consume Tab before element key handlers run.
         // Intercept navigation before action dispatch, scoped to this window.
@@ -285,12 +292,6 @@ impl Render for DictApp {
                     .flex_1()
                     .min_h(px(0.))
                     .w_full()
-                    .child(word_list::word_list(
-                        WordListProps {
-                            state: self.state.clone(),
-                        },
-                        cx,
-                    ))
                     .child(detail_panel::detail_panel(self.state.clone(), cx)),
             );
 
@@ -305,6 +306,7 @@ impl Render for DictApp {
                     cx.update_entity(&input_handle, |input, cx| {
                         input.focus(window, cx);
                     });
+                    window.dispatch_action(Box::new(gpui_component::input::SelectAll), cx);
                 } else if key == "escape" {
                     // Escape: clear the search field
                     cx.update_entity(&input_handle, |input, cx| {

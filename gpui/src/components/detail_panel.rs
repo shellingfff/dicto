@@ -14,7 +14,7 @@ use crate::{
     state::{DictResult, DictState},
 };
 
-/// Renders the right panel showing the selected word's definition.
+/// Renders the selected word's definition across the content area.
 ///
 /// The heading and tab strip live above the scroll area so that the
 /// TabBar's horizontal-overflow scroller never captures wheel events
