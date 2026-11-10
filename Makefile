@@ -1,8 +1,27 @@
-# Makefile for building Windows .exe from Linux
+# Linux build/install and Windows cross-compilation.
+# DESTDIR stages installation for packaging; PREFIX is the final install location.
+PREFIX ?= /usr/local
+DESTDIR ?=
+CARGO ?= cargo
+LINUX_TARGET_DIR ?= target
 
-.PHONY: windows clean-patches icon build clean help
+.DEFAULT_GOAL := linux
 
-# Default target
+.PHONY: linux install windows patch-gpui reset-patches icon build clean help
+
+# Build as your regular user before running a system-wide install with sudo.
+linux:
+	$(CARGO) build --locked --release --package dicto --target-dir "$(LINUX_TARGET_DIR)"
+
+# Install an already-built binary, without running Cargo as root.
+install:
+	@test -x "$(LINUX_TARGET_DIR)/release/dicto" || { echo "Run 'make linux' before installing." >&2; exit 1; }
+	install -Dm755 "$(LINUX_TARGET_DIR)/release/dicto" "$(DESTDIR)$(PREFIX)/bin/dicto"
+	install -Dm644 packaging/arch/dicto.desktop "$(DESTDIR)$(PREFIX)/share/applications/dicto.desktop"
+	install -Dm644 assets/icon.svg "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/dicto.svg"
+	install -Dm644 LICENSE "$(DESTDIR)$(PREFIX)/share/licenses/dicto/LICENSE"
+
+# Windows cross-compilation
 windows: patch-gpui icon build
 	@echo ""
 	@echo "=== Build successful ==="
@@ -54,7 +73,10 @@ reset-patches:
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  make windows      - Build Windows .exe (default)"
+	@echo "  make linux        - Build Linux release binary (default)"
+	@echo "  make install      - Install built binary, desktop launcher, icon and license"
+	@echo "                      PREFIX=/usr/local; supports DESTDIR staging"
+	@echo "  make windows      - Build Windows .exe"
 	@echo "  make patch-gpui   - Apply gpui cross-compilation patches only"
 	@echo "  make icon         - Generate Windows icon only"
 	@echo "  make build        - Build .exe (requires patches and icon)"

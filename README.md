@@ -60,9 +60,16 @@ Requires [Visual C++ Redistributable (VC_redist.x64.exe)](https://aka.ms/vs/17/r
 ### From source
 
 ```bash
-cargo build --release --package dicto
+make linux
 # binary at target/release/dicto
+sudo make install
 ```
+
+This installs the binary, desktop launcher, icon, and license under `/usr/local`.
+To install for your user without sudo, run `make install PREFIX="$HOME/.local"`
+after building, and ensure `~/.local/bin` is in your `PATH`.
+Repeat the build and install commands to update. Packaging can use
+`make install DESTDIR=/path/to/staging PREFIX=/usr`.
 
 **Runtime dependencies:** `gtk3`, `alsa-lib`, `libxkbcommon`, `lzo`
 
