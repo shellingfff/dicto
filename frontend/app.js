@@ -93,8 +93,7 @@ function renderSettings() {
     const enabled=document.createElement('input'); enabled.type='checkbox'; enabled.checked=dict.enabled; enabled.setAttribute('aria-label',`Enable ${dict.path}`); enabled.onchange=()=>dict.enabled=enabled.checked;
     const label=document.createElement('label'); label.textContent=draft.titles?.[dict.path] || dict.path.split(/[\\/]/).pop().replace(/\.mdx$/i,'');
     const path=document.createElement('small'); path.textContent=dict.path;
-    const name=document.createElement('input'); name.type='text'; name.value=dict.short_name; name.placeholder='Automatic tab name'; name.setAttribute('aria-label','Tab name'); name.oninput=()=>dict.short_name=name.value;
-    label.append(path,name);
+    label.append(path);
     const move=delta=>{ const j=i+delta; if(j<0||j>=draft.dictionaries.length)return; [draft.dictionaries[i],draft.dictionaries[j]]=[draft.dictionaries[j],draft.dictionaries[i]]; renderSettings(); };
     const up=button('↑',()=>move(-1)), down=button('↓',()=>move(1)); up.disabled=i===0;down.disabled=i===draft.dictionaries.length-1;
     row.append(enabled,label,up,down);return row;

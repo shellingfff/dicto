@@ -127,7 +127,9 @@ pub async fn lookup(app: tauri::AppHandle, word: String) -> Result<Vec<Hit>, Str
                 Some(Hit {
                     id: loaded.id.clone(),
                     name: loaded.dictionary.name().into(),
-                    short_name: loaded.dictionary.short_name().into(),
+                    short_name: mdict_rs::formats::mdict::dictionary_short_name(
+                        loaded.dictionary.name(),
+                    ),
                 })
             })
             .collect()
