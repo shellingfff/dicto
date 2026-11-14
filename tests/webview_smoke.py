@@ -169,12 +169,16 @@ try:
     click("#search")
     press("\ue004",shift=True)
     wait(lambda: js("return document.querySelector('#tabs button[aria-selected=true]').textContent==='测试词典'"), 'Shift+Tab navigation')
-    click("#search")
-    press("\ue015")
-    wait(lambda: js("return document.querySelector('#word').textContent==='hello again'"), 'next word')
-    click("#search")
-    press("\ue013")
-    wait(lambda: js("return document.querySelector('#word').textContent==='hello' && document.querySelectorAll('#tabs button').length===2"), 'previous word')
+    # Prefixes and typos must not silently substitute a different headword.
+    for query in ['hell', 'hellp', 'missingword']:
+        js("document.querySelector('#search').value=arguments[0];document.querySelector('#search').dispatchEvent(new Event('input',{bubbles:true}))", query)
+        wait(lambda: js("return document.querySelector('#word').textContent===arguments[0] && document.querySelector('#status').textContent===''", query), 'exact missing lookup')
+        assert js("return !document.querySelector('#empty').hidden && document.querySelector('#empty').textContent==='No definition found.' && document.querySelector('#definition').hidden && document.querySelectorAll('#tabs button').length===0")
+        press("\ue007")
+        wait(lambda: js("return document.querySelector('#status').textContent===''"), 'exact Enter lookup')
+        assert js("return document.querySelector('#word').textContent===arguments[0] && document.querySelector('#definition').hidden", query)
+    js("document.querySelector('#search').value='HELLO';document.querySelector('#search').dispatchEvent(new Event('input',{bubbles:true}))")
+    wait(lambda: js("return document.querySelector('#word').textContent==='HELLO' && document.querySelectorAll('#tabs button').length===2"), 'case-insensitive exact match')
     js("document.querySelectorAll('#tabs button')[1].click()")
     frame()
     click('a[href="entry://greeting"]')
@@ -182,8 +186,12 @@ try:
     wait(lambda: js("return document.querySelector('#word').textContent==='greeting'"), 'entry link lookup')
     assert js("return document.querySelectorAll('#tabs button').length") == 1
     assert js("return getComputedStyle(document.querySelector('#tabs')).display") != 'none'
+    frame()
+    wait(lambda: js("return document.body.textContent.includes('A friendly welcome.')"), 'linked definition loaded')
+    click('p')
     press("f",control=True)
-    assert js("let s=document.querySelector('#search');return document.activeElement===s && s.selectionStart===0 && s.selectionEnd===s.value.length")
+    parent()
+    wait(lambda: js("let s=document.querySelector('#search');return document.activeElement===s && s.selectionStart===0 && s.selectionEnd===s.value.length"), 'focus search from definition')
     click('#settings-open')
     wait(lambda: js("return document.querySelector('#settings').open"), 'settings')
     assert js("return document.querySelectorAll('.dictionary').length") == 2

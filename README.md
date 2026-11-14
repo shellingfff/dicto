@@ -9,7 +9,7 @@
 ## Features
 
 - **Tauri frontend** — system web rendering with a Rust backend; no Node runtime or frontend build tool required
-- **Instant search** — definitions update as you type
+- **Instant search** — definitions update as you type using case-insensitive exact matches; missing words show “No definition found.”
 - **Faithful rendering** — HTML, CSS, and JavaScript rendered in isolated dictionary frames
 - **Multi-dictionary** — load as many MDX files as you like, enable/disable/reorder them without restarting
 

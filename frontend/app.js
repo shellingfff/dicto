@@ -1,7 +1,7 @@
 'use strict';
 const invoke = window.__TAURI__.core.invoke;
 const $ = id => document.getElementById(id);
-let suggestions = [], selected = -1, hits = [], active = 0, currentWord = '', revision = 0, timer, draft;
+let hits = [], active = 0, currentWord = '', revision = 0, timer, draft;
 let generation = -1;
 let resultZoom = 100;
 try {
@@ -52,22 +52,10 @@ function renderResult() {
     if ($('definition').src !== url) $('definition').src = url;
   } else $('definition').removeAttribute('src');
 }
-async function search(preserveWord = false) {
+async function search() {
   const query = $('search').value.trim();
-  const request = ++revision;
-  if (!query) { $('status').textContent=''; suggestions=[]; selected=-1; hits=[]; currentWord=''; renderResult(); return; }
-  try {
-    const result = await invoke('search', {query});
-    if (request !== revision) return;
-    suggestions = result;
-    selected = result.length ? (preserveWord ? Math.max(0, result.indexOf(currentWord)) : 0) : -1;
-    await lookup(result[selected] || query);
-  } catch (error) { if (request === revision) report(error); }
-}
-function navigate(delta) {
-  if (!suggestions.length) return;
-  selected = (selected + delta + suggestions.length) % suggestions.length;
-  lookup(suggestions[selected]);
+  if (!query) { ++revision; $('status').textContent=''; hits=[]; currentWord=''; renderResult(); return; }
+  await lookup(query);
 }
 function keyboard(event) {
   if ($('settings').open) return;
@@ -76,17 +64,14 @@ function keyboard(event) {
     event.preventDefault?.(); changeResultZoom(key);
   } else if (key === 'tab' && hits.length) {
     event.preventDefault?.(); active = (active + (event.shiftKey ? -1 : 1) + hits.length) % hits.length; renderResult(); focusSearch();
-
   } else if (event.ctrlKey && ['l','f'].includes(key)) {
     event.preventDefault?.(); focusSearch();
   } else if (key === 'escape') {
     $('search').value = ''; search(); focusSearch();
-  } else if (event.target === $('search') && ['arrowdown','arrowup'].includes(key)) {
-    event.preventDefault(); navigate(key === 'arrowdown' ? 1 : -1);
   }
 }
 $('search').addEventListener('input', () => { ++revision; clearTimeout(timer); timer = setTimeout(search, 150); });
-$('search').addEventListener('keydown', event => { if (event.key === 'Enter') { clearTimeout(timer); lookup($('search').value.trim()); } });
+$('search').addEventListener('keydown', event => { if (event.key === 'Enter') { clearTimeout(timer); search(); } });
 document.addEventListener('keydown', keyboard);
 window.addEventListener('focus', focusSearch);
 window.addEventListener('message', event => {
@@ -138,7 +123,7 @@ async function poll() {
     else if(progress.generation!==generation) {
       generation=progress.generation;
       $('status').textContent=progress.errors.join('\n');
-      if($('search').value.trim()) await search(true);
+      if($('search').value.trim()) await search();
       const settings=await invoke('get_settings');
       if(!settings.dictionaries.length&&!$('settings').open) await openSettings();
     }
