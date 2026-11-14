@@ -132,7 +132,24 @@ try:
         wait(lambda: js("return window.__mediaTest.ok || window.__mediaTest.error"), 'audio playback')
         assert js("return window.__mediaTest.ok") is True
     parent()
-    print('Rendering, resource isolation and audio passed', flush=True)
+    # Zoom changes only definition content and survives dictionary navigation.
+    frame()
+    original_image_width = js("return document.querySelector('#test-image').getBoundingClientRect().width")
+    parent()
+    click('#search')
+    original_search_height = js("return document.querySelector('#search').getBoundingClientRect().height")
+    press('=', control=True)
+    frame()
+    wait(lambda: js("return Number(getComputedStyle(document.documentElement).zoom) === 1.1"), 'zoom in')
+    assert abs(js("return document.querySelector('#test-image').getBoundingClientRect().width") - original_image_width * 1.1) < 1
+    click('#test-image')
+    press('-', control=True)
+    wait(lambda: js("return Number(getComputedStyle(document.documentElement).zoom) === 1"), 'zoom out from definition')
+    parent()
+    click('#search')
+    press('=', control=True)
+    assert js("return document.querySelector('#search').getBoundingClientRect().height") == original_search_height
+    print('Rendering, zoom, resource isolation and audio passed', flush=True)
     if args.screenshots:
         (root / 'hello.png').write_bytes(base64.b64decode(wd('GET', '/screenshot')))
     # The definition frame forwards dictionary shortcuts to the shell.
@@ -141,6 +158,14 @@ try:
     press("\ue004")
     parent()
     wait(lambda: js("return document.querySelector('#tabs button[aria-selected=true]').textContent==='Second Dictionary'"), 'Tab dictionary navigation')
+    frame()
+    wait(lambda: js("return Number(getComputedStyle(document.documentElement).zoom) === 1.1"), 'zoom after dictionary switch')
+    parent()
+    click('#search')
+    press('0', control=True)
+    frame()
+    wait(lambda: js("return Number(getComputedStyle(document.documentElement).zoom) === 1"), 'reset zoom')
+    parent()
     click("#search")
     press("\ue004",shift=True)
     wait(lambda: js("return document.querySelector('#tabs button[aria-selected=true]').textContent==='测试词典'"), 'Shift+Tab navigation')

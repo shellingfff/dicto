@@ -3,6 +3,20 @@ const invoke = window.__TAURI__.core.invoke;
 const $ = id => document.getElementById(id);
 let suggestions = [], selected = -1, hits = [], active = 0, currentWord = '', revision = 0, timer, draft;
 let generation = -1;
+let resultZoom = 100;
+try {
+  const saved = Number(localStorage.getItem('resultZoom'));
+  if (Number.isFinite(saved) && saved >= 50 && saved <= 200) resultZoom = saved;
+} catch { /* Zoom still works if storage is unavailable. */ }
+function applyResultZoom() {
+  $('definition').contentWindow?.postMessage({type:'zoom', value:resultZoom / 100}, '*');
+}
+function changeResultZoom(key) {
+  resultZoom = key === '0' ? 100 : Math.max(50, Math.min(200, resultZoom + (key === '-' ? -10 : 10)));
+  try { localStorage.setItem('resultZoom', String(resultZoom)); } catch { /* Optional persistence. */ }
+  applyResultZoom();
+}
+$('definition').addEventListener('load', applyResultZoom);
 const report = error => { $('status').textContent = String(error); };
 const focusSearch = () => { if (!$('settings').open) { $('search').focus(); $('search').select(); } };
 
@@ -58,7 +72,9 @@ function navigate(delta) {
 function keyboard(event) {
   if ($('settings').open) return;
   const key = event.code === 'Tab' || event.keyCode === 9 ? 'tab' : event.key.toLowerCase();
-  if (key === 'tab' && hits.length) {
+  if (event.ctrlKey && !event.altKey && ['-', '=', '+', '0'].includes(key)) {
+    event.preventDefault?.(); changeResultZoom(key);
+  } else if (key === 'tab' && hits.length) {
     event.preventDefault?.(); active = (active + (event.shiftKey ? -1 : 1) + hits.length) % hits.length; renderResult(); focusSearch();
   } else if (event.ctrlKey && ['n','p'].includes(key)) {
     event.preventDefault?.(); navigate(key === 'n' ? 1 : -1);

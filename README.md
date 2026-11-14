@@ -90,6 +90,7 @@ the binary by Tauri. `make check` runs backend tests and JavaScript syntax check
 
 - **Tab / Shift+Tab** — next / previous dictionary result, wrapping around.
 - **Ctrl+N / Ctrl+P** — next / previous word in the suggestion list.
+- **Ctrl+- / Ctrl+=** — zoom dictionary results out / in (50–200%); Ctrl+0 resets. Zoom is remembered.
 - **Ctrl+L / Ctrl+F** — focus the search field.
 
 ## Dictionary setup

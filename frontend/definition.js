@@ -1,6 +1,13 @@
 // Dictionary code runs only inside a sandboxed frame, without native IPC.
 (() => {
   const send = (type, value) => parent.postMessage({type, value}, '*');
+  window.addEventListener('message', event => {
+    if (event.source !== parent || event.data?.type !== 'zoom') return;
+    const zoom = event.data.value;
+    if (typeof zoom === 'number' && Number.isFinite(zoom) && zoom >= 0.5 && zoom <= 2) {
+      document.documentElement.style.setProperty('zoom', String(zoom), 'important');
+    }
+  });
   // Explicit entry styles take precedence over legacy dictionary-wide fallback
   // sheets. Let the browser identify links rather than parsing HTML in Rust.
   const removeFallbacks = () => {
@@ -39,7 +46,7 @@
   });
   document.addEventListener('keydown', event => {
     const key = event.code === 'Tab' || event.keyCode === 9 ? 'Tab' : event.key;
-    if (key === 'Tab' || (event.ctrlKey && ['n','p','l','f'].includes(event.key.toLowerCase())) || event.key === 'Escape') {
+    if (key === 'Tab' || (event.ctrlKey && !event.altKey && ['n','p','l','f','-','=','+','0'].includes(event.key.toLowerCase())) || event.key === 'Escape') {
       event.preventDefault(); send('key', {key, ctrlKey:event.ctrlKey, shiftKey:event.shiftKey});
     }
   });
