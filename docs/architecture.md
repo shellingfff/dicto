@@ -14,7 +14,7 @@ The old `gpui/` implementation is retained as reference, outside the workspace.
 1. The search field debounces input for 150 ms and calls the `search` command.
 2. The Rust backend queries enabled dictionaries through the existing
    `Dictionary::suggestions` API, deduplicates matches, and puts exact matches
-   first. Ctrl+N/P selects adjacent matches without showing a word sidebar.
+   first. The search field supports Up/Down navigation without a word sidebar.
 3. `lookup` uses `Dictionary::lookup` and returns dictionary IDs and tab titles.
 4. The selected tab opens a sandboxed frame at the dictionary protocol's
    `/__entry?word=...` URL on its own dictionary origin. Its HTML and resources are loaded by

@@ -9,7 +9,7 @@
 ## Features
 
 - **Tauri frontend** — system web rendering with a Rust backend; no Node runtime or frontend build tool required
-- **Instant search** — definitions update as you type; navigate matching words with Ctrl+N/P
+- **Instant search** — definitions update as you type
 - **Faithful rendering** — HTML, CSS, and JavaScript rendered in isolated dictionary frames
 - **Multi-dictionary** — load as many MDX files as you like, enable/disable/reorder them without restarting
 
@@ -89,7 +89,6 @@ the binary by Tauri. `make check` runs backend tests and JavaScript syntax check
 ## Keyboard shortcuts
 
 - **Tab / Shift+Tab** — next / previous dictionary result, wrapping around.
-- **Ctrl+N / Ctrl+P** — next / previous word in the suggestion list.
 - **Ctrl+- / Ctrl+=** — zoom dictionary results out / in (50–200%); Ctrl+0 resets. Zoom is remembered.
 - **Ctrl+L / Ctrl+F** — focus the search field.
 

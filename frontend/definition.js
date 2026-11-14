@@ -46,7 +46,7 @@
   });
   document.addEventListener('keydown', event => {
     const key = event.code === 'Tab' || event.keyCode === 9 ? 'Tab' : event.key;
-    if (key === 'Tab' || (event.ctrlKey && !event.altKey && ['n','p','l','f','-','=','+','0'].includes(event.key.toLowerCase())) || event.key === 'Escape') {
+    if (key === 'Tab' || (event.ctrlKey && !event.altKey && ['l','f','-','=','+','0'].includes(event.key.toLowerCase())) || event.key === 'Escape') {
       event.preventDefault(); send('key', {key, ctrlKey:event.ctrlKey, shiftKey:event.shiftKey});
     }
   });

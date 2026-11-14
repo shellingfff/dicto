@@ -76,8 +76,7 @@ function keyboard(event) {
     event.preventDefault?.(); changeResultZoom(key);
   } else if (key === 'tab' && hits.length) {
     event.preventDefault?.(); active = (active + (event.shiftKey ? -1 : 1) + hits.length) % hits.length; renderResult(); focusSearch();
-  } else if (event.ctrlKey && ['n','p'].includes(key)) {
-    event.preventDefault?.(); navigate(key === 'n' ? 1 : -1);
+
   } else if (event.ctrlKey && ['l','f'].includes(key)) {
     event.preventDefault?.(); focusSearch();
   } else if (key === 'escape') {
