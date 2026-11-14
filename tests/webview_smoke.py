@@ -179,7 +179,7 @@ try:
     assert list((root / 'dictionaries').rglob('*.fst')), 'indexes must live beside source files'
     assert not list(config.rglob('*.mdx')), 'source dictionaries must not be copied'
     print('Navigation and settings passed',flush=True)
-    if shutil.which('hyprctl'):
+    if shutil.which('hyprctl') and os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
         def clients():
             return json.loads(subprocess.check_output(['hyprctl','clients','-j'],text=True))
         candidates=[]
@@ -189,7 +189,7 @@ try:
             except OSError: pass
         assert candidates, 'test window is registered with Hyprland'
         client=max(candidates,key=lambda c:c['pid'])
-        assert client['class']=='dicto', f"Desktop icon identity mismatch: {client['class']}"
+        assert client['class']=='io.github.shellingfff.dicto', f"Desktop icon identity mismatch: {client['class']}"
         pid=client['pid']
         closed=subprocess.run(['hyprctl','dispatch','closewindow',f'address:{client["address"]}'],capture_output=True,text=True)
         if closed.returncode and 'dispatch in lua' in closed.stdout + closed.stderr:

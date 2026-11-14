@@ -37,7 +37,8 @@
           ]
         }
       ]
-    }
+    },
+    "enableGTKAppId": true
   },
   "bundle": {
     "active": true,

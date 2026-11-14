@@ -28,10 +28,13 @@ package() {
     "$pkgdir/usr/bin/dicto"
 
   install -Dm644 "$srcdir/dicto.desktop" \
-    "$pkgdir/usr/share/applications/dicto.desktop"
+    "$pkgdir/usr/share/applications/io.github.shellingfff.dicto.desktop"
 
   install -Dm644 "$srcdir/icon.svg" \
-    "$pkgdir/usr/share/icons/hicolor/scalable/apps/dicto.svg"
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.shellingfff.dicto.svg"
+
+  install -Dm644 "$srcdir/icon.png" \
+    "$pkgdir/usr/share/icons/hicolor/128x128/apps/io.github.shellingfff.dicto.png"
 
   install -Dm644 "$srcdir/LICENSE" \
     "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

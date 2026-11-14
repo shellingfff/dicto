@@ -31,10 +31,11 @@ jobs:
           cp target/release/dicto dist/
           cp packaging/arch/dicto.desktop dist/
           cp assets/icon.svg dist/
+          cp desktop/icons/icon.png dist/
           cp LICENSE dist/
           cd dist
           tar czf ../dicto-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz \
-            dicto dicto.desktop icon.svg LICENSE
+            dicto dicto.desktop icon.svg icon.png LICENSE
 
       # namcap lints the PKGBUILD recipes (missing depends, bad perms, wrong
       # install paths). PLACEHOLDER sums are swapped for SKIP so namcap's

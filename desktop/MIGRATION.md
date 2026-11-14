@@ -54,3 +54,9 @@ selection. Tab handling accepts the physical key code because WebKitGTK can
 report Shift+Tab's logical key as `Unidentified`.
 The real OALECD hello entry also passed with its original stylesheet,
 JavaScript, single CSS-generated sense numbers, and inline GREETING label.
+
+GNOME icon integration now enables the GTK application ID and installs matching
+`io.github.shellingfff.dicto` desktop/icon files. Release build, desktop-file
+validation, staged installation and cache generation passed. The native smoke
+test passed in GNOME on an isolated D-Bus session; Hyprland identity assertions
+now expect the new ID. Visual launcher matching requires installing the update.

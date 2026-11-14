@@ -68,7 +68,11 @@ sudo make install
 This installs the binary, desktop launcher, icon, and license under `/usr/local`.
 To install for your user without sudo, run `make install PREFIX="$HOME/.local"`
 after building, and ensure `~/.local/bin` is in your `PATH`.
-Repeat the build and install commands to update. Packaging can use
+Repeat the build and install commands to update. Linux installs use the application
+ID `io.github.shellingfff.dicto` for the launcher and icons, matching the GTK
+window ID. Installation refreshes available desktop/icon caches and replaces the
+old `dicto.desktop` launcher. After upgrading, quit and reopen Dicto; if it was
+pinned in GNOME, remove the old favorite and pin the new launcher. Packaging can use
 `make install DESTDIR=/path/to/staging PREFIX=/usr`.
 
 **Linux dependencies:** WebKitGTK 4.1, GTK 3, and libappindicator. On Arch:
