@@ -9,7 +9,7 @@ import zlib
 
 
 def container(path, records, title, mdd=False):
-    records = sorted(records.items())
+    records = sorted(records.items() if isinstance(records, dict) else records, key=lambda record: record[0])
     encoding = 'utf-16le' if mdd else 'utf-8'
     term = b'\0\0' if mdd else b'\0'
     header = (f'<Dictionary GeneratedByEngineVersion="2.0" Encrypted="0" Encoding="UTF-8" Title="{title}"/>').encode('utf-16le')
@@ -42,7 +42,7 @@ def create(root):
 <xhtml:ol start="3"><xhtml:li>express surprise</xhtml:li></xhtml:ol>
 <img id="test-image" src="picture.svg"><img id="root-image" src="/picture.svg"><a id="test-sound" href="sound://hello.wav">Play pronunciation</a>
 <p id="script-status">Script not loaded</p>'''
-    container(root / 'nested' / 'Example.mdx', {'hello': hello, 'hello again': '<p>Second headword</p>', 'greeting': '<p>A friendly welcome.</p>'}, '测试词典')
+    container(root / 'nested' / 'Example.mdx', [('hello', hello), ('hello again', '<p>Second headword</p>'), ('greeting', '<p>A friendly welcome.</p>'), ('plum', '<p>A purple fruit.</p>'), ('plum', '@@@LINK=plumb'), ('plumb', '<p>Measure depth.</p>')], '测试词典')
     audio = io.BytesIO()
     with wave.open(audio, 'wb') as wav:
         wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(8000)

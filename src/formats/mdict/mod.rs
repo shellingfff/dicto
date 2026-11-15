@@ -53,6 +53,16 @@ fn decode_offset(b: &[u8]) -> Option<(u64, u32, u32, u32, u32)> {
 }
 
 const MAX_REDIRECTS: u8 = 5;
+// Version 1 preserves source order when duplicate headwords are deduplicated.
+// Older indexes may have selected a later alias instead of the first definition.
+const MDX_INDEX_VERSION: &str = "1\n";
+
+fn mdx_index_current(file: &str) -> bool {
+    PathBuf::from(format!("{file}.fst")).exists()
+        && PathBuf::from(format!("{file}.offsets")).exists()
+        && fs::read_to_string(format!("{file}.fst.version"))
+            .is_ok_and(|version| version == MDX_INDEX_VERSION)
+}
 
 // ── FST index ─────────────────────────────────────────────────────────────────
 
@@ -658,7 +668,7 @@ impl Dictionary for MdxDictionary {
     }
 
     fn index_ready(&self) -> bool {
-        let mdx_ready = PathBuf::from(format!("{}.fst", self.mdx_path)).exists();
+        let mdx_ready = mdx_index_current(&self.mdx_path);
         let mdd_ready = self
             .mdd_path
             .as_ref()
@@ -673,12 +683,16 @@ impl Dictionary for MdxDictionary {
 fn build_mdx_index(file: &str, force: bool) -> anyhow::Result<()> {
     let fst_path = format!("{file}.fst");
     let off_path = format!("{file}.offsets");
-    if PathBuf::from(&fst_path).exists() {
-        if force {
-            fs::remove_file(&fst_path)?;
-            fs::remove_file(&off_path).ok();
-        } else {
-            return Ok(());
+    let version_path = format!("{file}.fst.version");
+    if !force && mdx_index_current(file) {
+        return Ok(());
+    }
+    // Unlink old files before rebuilding: running readers may still mmap them.
+    for path in [&fst_path, &off_path, &version_path] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
         }
     }
     let res = (|| -> anyhow::Result<()> {
@@ -703,7 +717,9 @@ fn build_mdx_index(file: &str, force: bool) -> anyhow::Result<()> {
                 )
             })
             .collect();
-        entries.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        // Stable sorting keeps the first source entry for duplicate keys.
+        // OALECD, for example, has a real "plum" followed by a "plumb" alias.
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
         entries.dedup_by(|a, b| a.0 == b.0);
 
         let mut off_writer = BufWriter::new(File::create(&off_path)?);
@@ -713,11 +729,14 @@ fn build_mdx_index(file: &str, force: bool) -> anyhow::Result<()> {
             off_writer.write_all(rec)?;
         }
         builder.finish()?;
+        off_writer.flush()?;
+        fs::write(&version_path, MDX_INDEX_VERSION)?;
         info!("MDX indexed {} entries: {}", entries.len(), fst_path);
         Ok(())
     })();
 
     if res.is_err() {
+        fs::remove_file(&version_path).ok();
         fs::remove_file(&fst_path).ok();
         fs::remove_file(&off_path).ok();
     }

@@ -26,4 +26,6 @@ from dictionary metadata, including full Unicode names. Legacy custom tab-name
 values in the settings file are ignored by the desktop frontend.
 
 Source MDX/MDD and companion CSS stay where they are. The core writes `.fst`
-and `.offsets` indexes beside them, so indexing requires a writable directory.
+and `.offsets` indexes beside them, plus an MDX `.fst.version` marker, so indexing
+requires a writable directory. Older indexes are rebuilt automatically when
+the index version changes. Duplicate headwords retain the first source entry.
