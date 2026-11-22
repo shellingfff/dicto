@@ -13,6 +13,11 @@ fn show(app: &tauri::AppHandle) {
 }
 
 fn main() {
+    let context = tauri::generate_context!();
+    // GTK's Wayland window ID defaults to the program name, independently of
+    // the GTK application ID. KWin uses it to find the desktop file and icon.
+    #[cfg(target_os = "linux")]
+    glib::set_prgname(Some(context.config().identifier.as_str()));
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
         .plugin(tauri_plugin_dialog::init())
@@ -61,6 +66,6 @@ fn main() {
                 let _ = window.hide();
             }
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("could not start Dicto");
 }

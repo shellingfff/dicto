@@ -17,7 +17,7 @@ linux:
 install:
 	@test -x "$(LINUX_TARGET_DIR)/release/dicto" || { echo "Run 'make linux' before installing." >&2; exit 1; }
 	install -Dm755 "$(LINUX_TARGET_DIR)/release/dicto" "$(DESTDIR)$(PREFIX)/bin/dicto"
-	install -Dm644 packaging/arch/dicto.desktop "$(DESTDIR)$(PREFIX)/share/applications/io.github.shellingfff.dicto.desktop"
+	install -Dm644 packaging/linux/io.github.shellingfff.dicto.desktop "$(DESTDIR)$(PREFIX)/share/applications/io.github.shellingfff.dicto.desktop"
 	install -Dm644 assets/icon.svg "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/io.github.shellingfff.dicto.svg"
 	install -Dm644 desktop/icons/icon.png "$(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps/io.github.shellingfff.dicto.png"
 	# Retire the previous launcher to avoid duplicate entries after an upgrade.

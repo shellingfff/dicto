@@ -15,6 +15,9 @@ tauri-plugin-single-instance = "2"
 mime_guess = "2"
 percent-encoding = "2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+glib = "0.18"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

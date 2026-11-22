@@ -42,8 +42,9 @@ duplicated. Plain XHTML lists without CSS-generated labels receive native list
 semantics. Pronunciation links fetch audio into a Blob because WebKit's media
 pipeline cannot directly stream this custom protocol.
 
-Windows packaging targets WebView2 but has not been executed on this Linux
-machine. Installation is staged for verification; system installation and git
+Windows packaging uses Tauri NSIS with an embedded WebView2 bootstrapper.
+Linux release packaging uses AppImage instead of AUR. Windows installation has
+not been executed on this Linux machine. Installation is staged for verification; system installation and git
 commits are separate from this migration.
 
 Verified on Linux: release build, all 12 Rust tests, Clippy with warnings denied,

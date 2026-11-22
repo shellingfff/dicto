@@ -15,47 +15,39 @@
 
 ## Installation
 
-### Linux
+### Linux (AppImage)
 
-[Download](https://github.com/logi-camp/dicto/releases/latest) — look for:
-
-| File | Description |
-| ---- | ----------- |
-| `dicto-*-x86_64-unknown-linux-gnu.tar.gz` | Generic Linux binary |
-
-Extract the archive and run the binary.
-
-### Arch Linux (AUR)
-
-Install from AUR using your preferred helper (e.g. `yay`, `paru`, `pikaur`).
-Both packages are updated automatically by CI on every tagged release:
+Download `dicto-*-x86_64.AppImage` from the
+[releases page](https://github.com/shellingfff/dicto/releases/latest), then:
 
 ```bash
-# Build from source
-yay -S dicto
-
-# Or install pre-built binary
-yay -S dicto-bin
+chmod +x dicto-*-x86_64.AppImage
+./dicto-*-x86_64.AppImage
 ```
 
-Or manually:
-
-```bash
-git clone https://aur.archlinux.org/dicto.git
-cd dicto
-makepkg -si
-```
+The x86-64 AppImage bundles WebKitGTK and audio plugins. Releases are built on
+Ubuntu 22.04 as the compatibility baseline; older distributions may not work.
+If FUSE is unavailable, run with `--appimage-extract-and-run`.
+This fork no longer publishes AUR packages.
 
 ### Windows
 
-[Download](https://github.com/logi-camp/dicto/releases/latest) — look for:
+Download from the [releases page](https://github.com/shellingfff/dicto/releases/latest):
 
 | File | Description |
 | ---- | ----------- |
-| `dicto-*-windows-x86_64-installer.exe` | Installer |
-| `dicto-*-windows-x86_64-portable.zip` | Portable (no install needed) |
+| `dicto-*-windows-x86_64-installer.exe` | Recommended NSIS installer |
+| `dicto-*-windows-x86_64-portable.zip` | Portable executable |
 
-Requires Microsoft Edge WebView2 Runtime and the [Visual C++ Redistributable (VC_redist.x64.exe)](https://aka.ms/vs/17/release/vc_redist.x64.exe). The portable executable does not bundle WebView2.
+The installer checks for Microsoft Edge WebView2 and runs its embedded
+bootstrapper when the runtime is missing. Installing the missing runtime
+requires internet access. The portable ZIP does not install WebView2; install
+that runtime separately before running it. The
+[Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+may also be needed on a clean Windows installation.
+
+If upgrading from the old Inno Setup installer, uninstall that version first.
+The new installer uses a different installer registration.
 
 ### From source
 
@@ -70,7 +62,8 @@ To install for your user without sudo, run `make install PREFIX="$HOME/.local"`
 after building, and ensure `~/.local/bin` is in your `PATH`.
 Repeat the build and install commands to update. Linux installs use the application
 ID `io.github.shellingfff.dicto` for the launcher and icons, matching the GTK
-window ID. Installation refreshes available desktop/icon caches and replaces the
+window ID. The GTK program name also matches this ID so Plasma can associate
+Wayland windows with the launcher. Installation refreshes available desktop/icon caches and replaces the
 old `dicto.desktop` launcher. After upgrading, quit and reopen Dicto; if it was
 pinned in GNOME, remove the old favorite and pin the new launcher. Packaging can use
 `make install DESTDIR=/path/to/staging PREFIX=/usr`.
@@ -134,3 +127,23 @@ from the active workspace and normal builds.
 ## References
 
 - [mdict-analysis](https://bitbucket.org/xwang/mdict-analysis) — MDX/MDD format specification
+
+## Release builds
+
+GitHub Actions builds an AppImage and a Windows NSIS installer with the pinned
+Tauri CLI. A `v<version>` tag must match both `desktop/Cargo.toml` and
+`desktop/tauri.conf.json`; both platform builds must succeed before publication.
+Manual workflow runs create downloadable artifacts without publishing a release.
+Artifacts use the application version, not the branch name.
+
+To bundle locally, install the platform build dependencies, then run from
+`desktop/`:
+
+```bash
+# Linux (Ubuntu 22.04 recommended for distributable builds)
+npx --yes @tauri-apps/cli@2.12.6 build --ci --bundles appimage -- --locked
+# Windows
+npx --yes @tauri-apps/cli@2.12.6 build --ci --bundles nsis -- --locked
+```
+
+Bundles appear under `target/release/bundle/` in the workspace root.

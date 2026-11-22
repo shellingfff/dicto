@@ -47,6 +47,25 @@
       "icons/icon.ico"
     ],
     "category": "Education",
-    "shortDescription": "Offline dictionary"
+    "shortDescription": "Offline dictionary",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+      "deb": {
+        "desktopTemplate": "../packaging/linux/appimage.desktop.hbs"
+      }
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "perMachine",
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "licenseFile": "../LICENSE"
   }
 }

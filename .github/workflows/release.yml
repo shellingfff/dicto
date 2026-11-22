@@ -3,109 +3,98 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:  # Manual testing without tags
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TAURI_CLI_VERSION: 2.12.6
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    container: archlinux:latest
+  version:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Install dependencies
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git webkit2gtk-4.1 libappindicator-gtk3 clang pkgconf upx
-
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate release version
+        id: version
+        run: node .github/scripts/release-version.mjs
 
+  build-linux:
+    needs: version
+    # Build against an older glibc baseline, not rolling Arch.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --locked --release --package dicto
-
-      - name: Compress binary with UPX
-        run: upx --best --lzma target/release/dicto
-
-      - name: Package release tarball
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install AppImage build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf file libfuse2 squashfs-tools \
+            gstreamer1.0-plugins-good gstreamer1.0-alsa gstreamer1.0-pulseaudio
+      - name: Build AppImage with bundled media support
+        working-directory: desktop
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: npx --yes @tauri-apps/cli@${TAURI_CLI_VERSION} build --ci --bundles appimage -- --locked
+      - name: Collect AppImage
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           mkdir -p dist
-          cp target/release/dicto dist/
-          cp packaging/arch/dicto.desktop dist/
-          cp assets/icon.svg dist/
-          cp desktop/icons/icon.png dist/
-          cp LICENSE dist/
-          cd dist
-          tar czf ../dicto-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz \
-            dicto dicto.desktop icon.svg icon.png LICENSE
-
-      # namcap lints the PKGBUILD recipes (missing depends, bad perms, wrong
-      # install paths). PLACEHOLDER sums are swapped for SKIP so namcap's
-      # checksum checks pass; CI injects the real sums only when publishing.
-      - name: Lint PKGBUILDs with namcap
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "$GITHUB_REF_NAME" != v* ]]; then
-            VERSION="$(grep -m1 '^version' desktop/Cargo.toml | sed 's/.*"\(.*\)"/\1/')"
-          fi
-          pacman -S --noconfirm namcap
-          for pkg in packaging/arch/dicto packaging/arch/dicto-bin; do
-            cp "$pkg/PKGBUILD" /tmp/PKGBUILD
-            sed -i "s/^pkgver=.*/pkgver=${VERSION}/" /tmp/PKGBUILD
-            sed -i "s/'PLACEHOLDER'/'SKIP'/" /tmp/PKGBUILD
-            echo "::group::namcap $pkg"
-            namcap /tmp/PKGBUILD
-            echo "::endgroup::"
-          done
-
+          images=(target/release/bundle/appimage/*.AppImage)
+          test "${#images[@]}" -eq 1
+          test -f "${images[0]}"
+          cp "${images[0]}" "dist/dicto-${VERSION}-x86_64.AppImage"
       - uses: actions/upload-artifact@v4
         with:
-          name: dicto-x86_64
-          path: dicto-*.tar.gz
+          name: dicto-linux
+          path: dist/*.AppImage
+          if-no-files-found: error
 
   build-windows:
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Inno Setup
-        run: choco install innosetup -y
-
-      - name: Install UPX
-        run: choco install upx -y --no-progress
-
-      - name: Build Windows executable (release)
-        run: cargo build --locked --release --package dicto
-
-      - name: Compress binary with UPX
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build NSIS installer with WebView2 bootstrapper
+        working-directory: desktop
         shell: bash
-        run: upx --best --lzma target/release/dicto.exe
-
-      - name: Create portable package
+        run: npx --yes @tauri-apps/cli@${TAURI_CLI_VERSION} build --ci --bundles nsis -- --locked
+      - name: Collect installer and portable ZIP
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        shell: pwsh
         run: |
-          mkdir portable
-          copy target\release\dicto.exe portable\
-          copy LICENSE portable\
-          copy README.md portable\
-          Compress-Archive -Path portable\* -DestinationPath dicto-${{ github.ref_name }}-windows-x86_64-portable.zip
-
-      - name: Create Inno Setup installer
-        run: iscc packaging\windows\installer.iss /DAppVersion=${{ github.ref_name }}
-
-      - name: Move installer to repo root (for artifact upload)
-        shell: bash
-        run: mv packaging/windows/Output/*.exe .
-
+          New-Item -ItemType Directory -Path dist, portable | Out-Null
+          $installers = @(Get-ChildItem target/release/bundle/nsis/*-setup.exe)
+          if ($installers.Count -ne 1) { throw "Expected exactly one NSIS installer" }
+          Copy-Item $installers[0].FullName "dist/dicto-$env:VERSION-windows-x86_64-installer.exe"
+          Copy-Item target/release/dicto.exe, LICENSE, README.md portable/
+          Compress-Archive -Path portable/* -DestinationPath "dist/dicto-$env:VERSION-windows-x86_64-portable.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: dicto-windows
-          path: |
-            dicto-*-windows-x86_64-portable.zip
-            dicto-*-windows-x86_64-installer.exe
+          path: dist/*
+          if-no-files-found: error
 
   release:
-    needs: [build, build-windows]
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -115,50 +104,7 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-
-  publish-aur:
-    needs: [release]
-    runs-on: ubuntu-latest
-    container: archlinux:latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-    steps:
-      - name: Install dependencies
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git openssh curl
-
-      - uses: actions/checkout@v4
-
-      # The AUR push uses an ed25519 key registered on the AUR account,
-      # stored as the AUR_SSH_PRIVATE_KEY repo secret. AUR has no per-package
-      # deploy keys, so that key is account-wide — treat it as a credential.
-      - name: Publish dicto (source package) to AUR
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          export VERSION
-          export AUR_REPO=dicto
-          export PKGBUILD_PATH=packaging/arch/dicto/PKGBUILD
-          curl -fsSL "https://github.com/logi-camp/dicto/archive/refs/tags/v${VERSION}.tar.gz" -o /tmp/tag-tarball.tar.gz
-          export B2SUM="$(b2sum /tmp/tag-tarball.tar.gz | awk '{print $1}')"
-          packaging/arch/publish-aur.sh
-
-      - name: Publish dicto-bin (prebuilt package) to AUR
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          export VERSION
-          export AUR_REPO=dicto-bin
-          export PKGBUILD_PATH=packaging/arch/dicto-bin/PKGBUILD
-          TARBALL_URL="https://github.com/logi-camp/dicto/releases/download/v${VERSION}/dicto-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL "$TARBALL_URL" -o /tmp/release-tarball.tar.gz
-          export B2SUM="$(b2sum /tmp/release-tarball.tar.gz | awk '{print $1}')"
-          packaging/arch/publish-aur.sh
+          fail_on_unmatched_files: true

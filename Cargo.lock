@@ -854,6 +854,7 @@ dependencies = [
 name = "dicto"
 version = "0.7.0"
 dependencies = [
+ "glib",
  "mdict-rs",
  "mime_guess",
  "percent-encoding",
