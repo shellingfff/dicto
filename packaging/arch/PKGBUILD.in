@@ -1,0 +1,23 @@
+pkgname=dicto
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Offline dictionary with MDX support'
+arch=('x86_64')
+url='https://github.com/shellingfff/dicto'
+license=('AGPL-3.0-or-later')
+depends=('glibc' 'gcc-libs' 'glib2' 'gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator' 'openssl' 'zlib' 'gst-plugins-good' 'hicolor-icon-theme')
+makedepends=('rust' 'pkgconf')
+optdepends=('gst-plugins-bad: additional pronunciation audio formats')
+options=('!lto' '!debug')
+source=("dicto-${pkgver}.tar.gz")
+sha256sums=('@SHA256@')
+
+build() {
+    cd "$srcdir/dicto-$pkgver"
+    cargo build --locked --release --package dicto --target-dir target
+}
+
+package() {
+    cd "$srcdir/dicto-$pkgver"
+    make install DESTDIR="$pkgdir" PREFIX=/usr
+}

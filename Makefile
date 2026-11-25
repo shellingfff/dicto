@@ -7,7 +7,7 @@ LINUX_TARGET_DIR ?= target
 
 .DEFAULT_GOAL := linux
 
-.PHONY: linux install windows build check help
+.PHONY: linux install windows build check help arch-package
 
 # Build as your regular user before running a system-wide install with sudo.
 linux:
@@ -33,6 +33,9 @@ install:
 windows:
 	$(CARGO) build --locked --release --package dicto
 
+arch-package:
+	bash packaging/arch/build-package.sh
+
 build: linux
 
 check:
@@ -44,5 +47,6 @@ help:
 	@echo "make linux        Build the Tauri app (default)"
 	@echo "make install      Install binary, launcher, icon and license"
 	@echo "                  Supports PREFIX and DESTDIR"
+	@echo "make arch-package Build an Arch package in target/arch-package"
 	@echo "make check        Run Rust tests and JavaScript syntax checks"
 	@echo "make windows      Build natively on Windows with MSVC/WebView2"

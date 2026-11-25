@@ -15,20 +15,21 @@
 
 ## Installation
 
-### Linux (AppImage)
+### Arch Linux
 
-Download `dicto-*-x86_64.AppImage` from the
-[releases page](https://github.com/shellingfff/dicto/releases/latest), then:
+Download `dicto-*-x86_64.pkg.tar.zst` from the
+[releases page](https://github.com/shellingfff/dicto/releases/latest), then install it:
 
 ```bash
-chmod +x dicto-*-x86_64.AppImage
-./dicto-*-x86_64.AppImage
+sudo pacman -U ./dicto-*-x86_64.pkg.tar.zst
 ```
 
-The x86-64 AppImage bundles WebKitGTK and audio plugins. Releases are built on
-Ubuntu 22.04 as the compatibility baseline; older distributions may not work.
-If FUSE is unavailable, run with `--appimage-extract-and-run`.
-This fork no longer publishes AUR packages.
+Pacman installs the required WebKitGTK and audio dependencies. The package includes
+the application, launcher, icons, and license under `/usr`. Releases are built on
+Arch Linux; this fork does not publish to the AUR.
+
+If you previously used `sudo make install`, remove the old `/usr/local/bin/dicto`
+and its launcher/icons under `/usr/local/share` so they do not override the package.
 
 ### Windows
 
@@ -71,7 +72,7 @@ pinned in GNOME, remove the old favorite and pin the new launcher. Packaging can
 **Linux dependencies:** WebKitGTK 4.1, GTK 3, and libappindicator. On Arch:
 
 ```bash
-sudo pacman -S --needed base-devel rust webkit2gtk-4.1 libappindicator-gtk3 gst-plugins-good
+sudo pacman -S --needed base-devel rust webkit2gtk-4.1 libayatana-appindicator gst-plugins-good
 ```
 
 GStreamer (`gst-plugins-good`) supplies the audio sink and common pronunciation
@@ -130,20 +131,27 @@ from the active workspace and normal builds.
 
 ## Release builds
 
-GitHub Actions builds an AppImage and a Windows NSIS installer with the pinned
-Tauri CLI. A `v<version>` tag must match both `desktop/Cargo.toml` and
+GitHub Actions builds an Arch Linux package and a Windows NSIS installer.
+A `v<version>` tag must match both `desktop/Cargo.toml` and
 `desktop/tauri.conf.json`; both platform builds must succeed before publication.
 Manual workflow runs create downloadable artifacts without publishing a release.
 Artifacts use the application version, not the branch name.
 
-To bundle locally, install the platform build dependencies, then run from
-`desktop/`:
+To build the Arch package locally, install the Linux build dependencies listed
+above and run as your regular user from the repository root:
 
 ```bash
-# Linux (Ubuntu 22.04 recommended for distributable builds)
-npx --yes @tauri-apps/cli@2.12.6 build --ci --bundles appimage -- --locked
-# Windows
+make arch-package
+sudo pacman -U target/arch-package/dicto-*-x86_64.pkg.tar.zst
+```
+
+This packages the current source tree using `packaging/arch/PKGBUILD.in`, with a
+SHA-256 checked source archive. The output is in `target/arch-package/`.
+
+To build the Windows installer, run from `desktop/` with the platform dependencies:
+
+```bash
 npx --yes @tauri-apps/cli@2.12.6 build --ci --bundles nsis -- --locked
 ```
 
-Bundles appear under `target/release/bundle/` in the workspace root.
+Windows bundles appear under `target/release/bundle/` in the workspace root.

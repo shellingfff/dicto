@@ -43,7 +43,7 @@ semantics. Pronunciation links fetch audio into a Blob because WebKit's media
 pipeline cannot directly stream this custom protocol.
 
 Windows packaging uses Tauri NSIS with an embedded WebView2 bootstrapper.
-Linux release packaging uses AppImage instead of AUR. Windows installation has
+Linux releases provide a pacman-installable Arch package built with makepkg. Windows installation has
 not been executed on this Linux machine. Installation is staged for verification; system installation and git
 commits are separate from this migration.
 

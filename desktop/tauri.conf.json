@@ -48,14 +48,6 @@
     ],
     "category": "Education",
     "shortDescription": "Offline dictionary",
-    "linux": {
-      "appimage": {
-        "bundleMediaFramework": true
-      },
-      "deb": {
-        "desktopTemplate": "../packaging/linux/appimage.desktop.hbs"
-      }
-    },
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper",

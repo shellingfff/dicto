@@ -27,40 +27,21 @@ jobs:
 
   build-linux:
     needs: version
-    # Build against an older glibc baseline, not rolling Arch.
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
     steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm --needed git rust nodejs webkit2gtk-4.1 libayatana-appindicator gst-plugins-good
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install AppImage build dependencies
+      - name: Build Arch package as an unprivileged user
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config libssl-dev libgtk-3-dev \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
-            patchelf file libfuse2 squashfs-tools \
-            gstreamer1.0-plugins-good gstreamer1.0-alsa gstreamer1.0-pulseaudio
-      - name: Build AppImage with bundled media support
-        working-directory: desktop
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: npx --yes @tauri-apps/cli@${TAURI_CLI_VERSION} build --ci --bundles appimage -- --locked
-      - name: Collect AppImage
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          mkdir -p dist
-          images=(target/release/bundle/appimage/*.AppImage)
-          test "${#images[@]}" -eq 1
-          test -f "${images[0]}"
-          cp "${images[0]}" "dist/dicto-${VERSION}-x86_64.AppImage"
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- bash -c 'cd "$1" && make arch-package' -- "$GITHUB_WORKSPACE"
       - uses: actions/upload-artifact@v4
         with:
           name: dicto-linux
-          path: dist/*.AppImage
+          path: target/arch-package/*.pkg.tar.zst
           if-no-files-found: error
 
   build-windows:
